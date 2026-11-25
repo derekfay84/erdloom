@@ -1,0 +1,3849 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ERDLoom</title>
+  <style>
+:root {
+  --bg: #F4F6F9;
+  --panel: #FFFFFF;
+  --line: #E1E6EC;
+  --text: #1F2933;
+  --muted: #6B7785;
+  --accent: #2F80ED;
+  --danger: #D64545;
+  --ed-bg: #1E2430;
+  --ed-gutter: #171C26;
+  --ed-text: #D8DEE9;
+  --ed-font: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --ed-size: 13px;
+  --ed-lh: 20px;
+  --editor-w: 34vw;
+  --rail-w: 220px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+  color: var(--text);
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { display: flex; flex-direction: column; background: var(--bg); overflow: hidden; }
+body.resizing, body.resizing * { cursor: col-resize !important; user-select: none; }
+body.dropping::after {
+  content: 'Drop a .dbml file to open it';
+  position: fixed; inset: 12px; border: 2px dashed var(--accent); border-radius: 14px;
+  background: rgba(47, 128, 237, .08); display: grid; place-items: center;
+  font-size: 18px; color: var(--accent); pointer-events: none; z-index: 100;
+}
+
+button {
+  font: inherit; font-size: 13px; color: var(--text); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 7px; padding: 5px 11px; cursor: pointer;
+}
+button:hover { border-color: #C5CFDA; background: #F8FAFC; }
+button:active { background: #EEF2F6; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ------------------------------------------------------------- top bar */
+.topbar {
+  display: flex; align-items: center; gap: 18px; height: 48px; padding: 0 14px;
+  background: var(--panel); border-bottom: 1px solid var(--line); flex: none;
+}
+.topbar { gap: 14px; }
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 650; font-size: 15px; white-space: nowrap; }
+.topbar button { white-space: nowrap; flex: none; }
+.docname { min-width: 0; flex: 0 1 auto; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+.palette-trigger {
+  display: flex; align-items: center; gap: 8px; flex: 0 1 340px; min-width: 0; margin-left: 6px;
+  color: var(--muted); background: var(--bg); border-color: var(--line); padding: 6px 10px;
+}
+.palette-trigger span { flex: 1; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+kbd {
+  font: 11px var(--ed-font); color: var(--muted); background: var(--panel); border: 1px solid var(--line);
+  border-bottom-width: 2px; border-radius: 4px; padding: 0 5px;
+}
+.actions { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; }
+.status { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.menu { position: relative; }
+.menu-list {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; min-width: 180px; padding: 4px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 9px; box-shadow: 0 8px 24px rgba(31, 41, 51, .12);
+  display: flex; flex-direction: column;
+}
+.menu-list[hidden] { display: none; }
+.menu-list button { border: 0; text-align: left; padding: 7px 10px; }
+.status.bad { color: var(--danger); }
+
+/* ---------------------------------------------------------------- tabs */
+.tabs { display: inline-flex; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 2px; flex: none; }
+.tabs button { border: 0; background: none; padding: 4px 12px; border-radius: 6px; font-size: 13px; color: var(--muted); }
+.tabs button:hover { background: none; color: var(--text); }
+.tabs button[aria-selected="true"] { background: var(--panel); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgba(31, 41, 51, .14); }
+
+/* --------------------------------------------------------------- split */
+.split { flex: 1; display: grid; grid-template-columns: var(--rail-w) var(--editor-w) 6px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); min-height: 0; }
+.split > .rail { grid-column: 1; }
+.split > .editor-pane { grid-column: 2; }
+.split > .resizer { grid-column: 3; }
+.split > .canvas-pane { grid-column: 4; }
+.split.no-rail { --rail-w: 0px; }
+.split.no-rail > .rail { display: none; }
+.split.no-editor { --editor-w: 0px; grid-template-columns: var(--rail-w) 0 0 minmax(0, 1fr); }
+.split.no-editor > .editor-pane, .split.no-editor > .resizer { display: none; }
+.split > .docs-pane { grid-column: 4; display: none; overflow-y: auto; background: #fff; }
+.split.docs > .canvas-pane { display: none; }
+.split.docs > .docs-pane { display: block; }
+.split.docs:not(.docs-editor) { grid-template-columns: var(--rail-w) 0 0 minmax(0, 1fr); }
+.split.docs:not(.docs-editor) > .editor-pane, .split.docs:not(.docs-editor) > .resizer { display: none; }
+.split.docs.docs-editor { grid-template-columns: var(--rail-w) var(--editor-w) 6px minmax(0, 1fr); }
+.split.docs.docs-editor.no-editor { --editor-w: 34vw; }
+.split.docs.docs-editor > .editor-pane { display: flex; }
+.split.docs.docs-editor > .resizer { display: block; }
+.pane { position: relative; min-width: 0; min-height: 0; }
+.editor-pane { display: flex; flex-direction: column; background: var(--ed-bg); }
+.resizer { cursor: col-resize; background: var(--line); position: relative; }
+.resizer::after { content: ''; position: absolute; inset: 0 -4px; }
+.resizer:hover { background: var(--accent); }
+
+/* -------------------------------------------------------------- editor */
+.editor { flex: 1; display: flex; min-height: 0; font-family: var(--ed-font); font-size: var(--ed-size); line-height: var(--ed-lh); }
+.editor .gutter {
+  flex: none; width: 46px; padding: 12px 0; overflow: hidden; background: var(--ed-gutter);
+  color: #566074; text-align: right; user-select: none;
+}
+.editor .gutter div { padding-right: 10px; height: var(--ed-lh); }
+.editor .gutter div.err { color: #fff; background: var(--danger); }
+.editor .code { position: relative; flex: 1; min-width: 0; }
+.editor pre, .editor textarea {
+  position: absolute; inset: 0; margin: 0; padding: 12px 14px; border: 0;
+  font: inherit; line-height: inherit; letter-spacing: 0; tab-size: 2;
+  white-space: pre; overflow: auto; word-wrap: normal;
+}
+.editor pre { color: var(--ed-text); pointer-events: none; overflow: hidden; }
+.editor textarea {
+  color: transparent; background: transparent; caret-color: #fff; resize: none; outline: none;
+}
+.editor textarea::selection { background: rgba(122, 162, 247, .35); color: transparent; }
+.t-k { color: #C792EA; font-weight: 600; }
+.t-st { color: #82AAFF; }
+.t-s { color: #C3E88D; }
+.t-q { color: #F0C674; }
+.t-x { color: #F78C6C; }
+.t-c { color: #637087; font-style: italic; }
+.t-n { color: #F78C6C; }
+.t-col { color: #FFCB6B; }
+.t-op { color: #89DDFF; font-weight: 700; }
+.t-b { color: #8F9BB3; }
+
+.errorbar {
+  flex: none; padding: 9px 12px; background: #3A1F25; color: #FFD7D7;
+  font-size: 12.5px; border-top: 1px solid #5E2A33; display: flex; gap: 8px; align-items: baseline;
+}
+.errorbar .err-loc {
+  background: var(--danger); color: #fff; border: 0; padding: 2px 8px; border-radius: 5px;
+  font-size: 12px; font-weight: 600; flex: none;
+}
+
+/* -------------------------------------------------------------- canvas */
+.canvas-pane { overflow: hidden; }
+.canvas {
+  position: absolute; inset: 0; overflow: hidden;
+  background-color: #F4F6F9;
+  background-image: radial-gradient(circle, #CBD3DD 1px, transparent 1.2px);
+  background-size: 22px 22px;
+}
+.diagram { width: 100%; height: 100%; display: block; cursor: grab; user-select: none; touch-action: none; }
+.diagram.panning { cursor: grabbing; }
+.diagram .table { cursor: move; transition: opacity .12s; }
+.diagram .ref { transition: opacity .12s; }
+.diagram .group { pointer-events: none; }
+.diagram .row:hover .row-bg { fill: #EEF4FD; }
+.diagram .row.hl .row-bg { fill: #DCEBFF; }
+.diagram.focus .table:not(.active) { opacity: .35; }
+.diagram.focus .ref:not(.active) { opacity: .15; }
+.diagram .ref.active .ref-line { stroke: var(--accent); stroke-width: 2.2; }
+.diagram .ref:hover .ref-line { stroke: var(--accent); }
+.diagram .table.active .table-outline { stroke: #A9C4EC; }
+
+.zoom {
+  position: absolute; right: 14px; bottom: 14px; display: flex; align-items: center; gap: 2px; z-index: 5;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 4px;
+  box-shadow: 0 2px 8px rgba(31, 41, 51, .08);
+}
+.zoom button { border: 0; padding: 4px 9px; }
+.zoom #zoom-level { font-size: 12px; color: var(--muted); min-width: 52px; font-variant-numeric: tabular-nums; }
+.zoom .zsep { width: 1px; height: 18px; background: var(--line); margin: 0 3px; }
+.hint {
+  position: absolute; left: 14px; bottom: 16px; font-size: 11.5px; color: var(--muted); z-index: 4;
+  background: rgba(255, 255, 255, .85); padding: 4px 8px; border-radius: 6px; pointer-events: none;
+  max-width: calc(100% - 380px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.minimap {
+  position: absolute; right: 14px; bottom: 60px; width: 168px; height: 112px; z-index: 5;
+  background: rgba(255, 255, 255, .92); border: 1px solid var(--line); border-radius: 9px;
+  box-shadow: 0 2px 8px rgba(31, 41, 51, .08); cursor: pointer; touch-action: none; overflow: hidden;
+}
+.minimap.empty { display: none; }
+
+/* ------------------------------------------------------------- view bar */
+.viewbar {
+  position: absolute; left: 12px; top: 12px; right: 12px; z-index: 5; display: flex; flex-wrap: wrap;
+  gap: 6px; align-items: center; pointer-events: none;
+}
+.viewbar > * { pointer-events: auto; }
+.chip {
+  font-size: 12.5px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px;
+  padding: 4px 11px; box-shadow: 0 1px 3px rgba(31, 41, 51, .06); white-space: nowrap;
+}
+.chip-mode { font-weight: 600; }
+.chip-mode.on { background: #EAF2FE; border-color: #B9D3FA; color: #1B5FC1; }
+.chip-count { font-weight: 400; color: var(--muted); margin-left: 4px; }
+.chip[aria-pressed="true"] { background: #1F2933; border-color: #1F2933; color: #fff; }
+.seg { display: inline-flex; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 2px; }
+.seg button { border: 0; border-radius: 999px; padding: 2px 9px; font-size: 12px; }
+.seg button[aria-pressed="true"] { background: #1B5FC1; color: #fff; }
+
+/* ----------------------------------------------------------- outline rail */
+.rail { display: flex; flex-direction: column; background: var(--panel); border-right: 1px solid var(--line); min-width: 0; min-height: 0; overflow: hidden; }
+.rail-head { padding: 10px; border-bottom: 1px solid var(--line); }
+.rail-head input {
+  width: 100%; font: inherit; font-size: 13px; padding: 7px 10px; border: 1px solid var(--line);
+  border-radius: 7px; background: var(--bg); color: var(--text); outline: none;
+}
+.rail-head input:focus { border-color: var(--accent); background: var(--panel); box-shadow: 0 0 0 3px rgba(47, 128, 237, .15); }
+.outline { flex: 1; overflow-y: auto; padding: 4px 6px 16px; font-size: 13px; }
+.o-section {
+  display: flex; justify-content: space-between; align-items: baseline; padding: 12px 8px 4px;
+  font-size: 11.5px; font-weight: 600; color: var(--muted);
+}
+.o-row { display: flex; align-items: center; border-radius: 6px; }
+.o-row:hover { background: #F2F5F8; }
+.o-item, .o-sub, .o-add, .o-btn { border: 0; background: none; border-radius: 6px; }
+.o-item {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 5px 8px; text-align: left;
+}
+.o-item:hover { background: none; }
+.o-item.active { background: #EAF2FE; color: #1B5FC1; }
+.o-item.active .o-meta { color: #5B8FD8; }
+.o-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.o-meta { color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.o-swatch { width: 9px; height: 9px; border-radius: 3px; flex: none; }
+.o-swatch.group { background: transparent; border: 2px dashed; width: 11px; height: 11px; }
+.o-glyph { width: 11px; text-align: center; font-size: 11px; color: var(--muted); flex: none; }
+.o-glyph.enum { font-weight: 700; color: #8E44AD; }
+.o-btn { flex: none; padding: 4px 6px; color: var(--muted); opacity: 0; display: grid; place-items: center; }
+.o-row:hover .o-btn, .o-btn:focus-visible { opacity: 1; }
+.o-btn:hover { color: var(--accent); background: none; }
+.o-row.hidden-in-view .o-name { color: var(--muted); }
+.o-sub {
+  display: flex; gap: 8px; width: 100%; padding: 3px 8px 3px 25px; text-align: left; font-size: 12.5px;
+}
+.o-sub .o-meta { font-family: var(--ed-font); }
+.o-add { width: 100%; text-align: left; padding: 5px 8px; color: var(--accent); font-size: 12.5px; }
+.o-add:hover { background: #F2F5F8; }
+.o-empty { padding: 16px 8px; color: var(--muted); }
+
+/* --------------------------------------------------------- command palette */
+.palette {
+  position: fixed; inset: 0; z-index: 60; background: rgba(15, 23, 32, .32);
+  display: flex; justify-content: center; align-items: flex-start; padding-top: 12vh;
+}
+.palette[hidden] { display: none; }
+.palette-box {
+  width: min(620px, calc(100vw - 32px)); background: var(--panel); border-radius: 12px;
+  box-shadow: 0 24px 60px rgba(15, 23, 32, .28); overflow: hidden; display: flex; flex-direction: column;
+  max-height: 70vh;
+}
+.palette-box input {
+  font: inherit; font-size: 16px; border: 0; outline: none; padding: 16px 18px; border-bottom: 1px solid var(--line);
+  color: var(--text); background: transparent;
+}
+.palette-list { overflow-y: auto; padding: 6px; }
+.p-item { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 7px; cursor: pointer; font-size: 14px; }
+.p-item.sel { background: #EAF2FE; }
+.p-group { width: 58px; flex: none; font-size: 11.5px; color: var(--muted); }
+.p-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-hint { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.p-empty { padding: 18px 12px; color: var(--muted); font-size: 14px; }
+.palette-foot { display: flex; gap: 16px; padding: 8px 14px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--muted); }
+
+/* -------------------------------------------------------------- import */
+.modal {
+  position: fixed; inset: 0; z-index: 70; background: rgba(15, 23, 32, .38);
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+}
+.modal[hidden] { display: none; }
+.modal-box {
+  width: min(1080px, 100%); height: min(720px, 100%); background: var(--panel); border-radius: 14px;
+  box-shadow: 0 24px 60px rgba(15, 23, 32, .3); display: flex; flex-direction: column; overflow: hidden;
+}
+.modal-head { display: flex; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+.modal-head h2 { margin: 0; font-size: 16px; font-weight: 650; flex: 1; }
+.modal-x { border: 0; font-size: 20px; line-height: 1; padding: 4px 10px; color: var(--muted); }
+.modal-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.imp-input { display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; min-height: 0; border-right: 1px solid var(--line); }
+.imp-help { margin: 0; font-size: 13.5px; color: var(--muted); line-height: 1.5; }
+.imp-cols { font: 12px var(--ed-font); background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 7px 9px; overflow-wrap: anywhere; }
+.imp-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.imp-file { font-size: 12.5px; color: var(--muted); }
+.imp-input textarea {
+  flex: 1; min-height: 140px; resize: none; font: 12.5px/1.6 var(--ed-font); padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: 8px; outline: none; color: var(--text); white-space: pre;
+}
+.imp-input textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(47, 128, 237, .15); }
+.imp-input.dragging textarea { border: 2px dashed var(--accent); background: #F3F8FF; }
+.imp-check { font-size: 13px; display: flex; gap: 8px; align-items: center; }
+.imp-preview { display: flex; flex-direction: column; min-height: 0; background: var(--ed-bg); }
+.imp-summary { padding: 12px 16px; font-size: 13px; color: #D8DEE9; border-bottom: 1px solid #2C3442; }
+.imp-summary b { color: #fff; }
+.imp-summary .muted { color: #8F9BB3; display: block; margin-top: 3px; font-size: 12px; }
+.imp-summary.bad { color: #FFB4B4; }
+.imp-issues { margin: 0; padding: 0; list-style: none; max-height: 30%; overflow-y: auto; }
+.imp-issues:empty { display: none; }
+.imp-issues li { padding: 6px 16px; font-size: 12.5px; color: #F0D9A8; border-bottom: 1px solid #2C3442; }
+.imp-issues li.err { color: #FFB4B4; }
+.imp-dbml { flex: 1; margin: 0; padding: 12px 16px; overflow: auto; font: 12.5px/1.6 var(--ed-font); color: var(--ed-text); }
+.modal-foot { display: flex; align-items: center; gap: 10px; padding: 12px 18px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.modal-foot .spacer { flex: 1; }
+.imp-mode { display: flex; gap: 16px; font-size: 13px; flex-wrap: wrap; }
+.imp-mode label { display: flex; gap: 6px; align-items: center; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+button.primary:hover { background: #256FD6; border-color: #256FD6; }
+@media (max-width: 760px) {
+  .modal { padding: 0; }
+  .modal-box { border-radius: 0; height: 100%; }
+  .modal-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(200px, 1fr); overflow-y: auto; }
+  .imp-input { border-right: 0; }
+}
+
+.tooltip {
+  position: absolute; display: none; z-index: 20; pointer-events: none; max-width: 340px;
+  background: #1F2933; color: #E8ECF1; border-radius: 8px; padding: 9px 11px;
+  font-size: 12.5px; line-height: 1.45; box-shadow: 0 6px 20px rgba(0, 0, 0, .2);
+}
+.tooltip .tt-title { font-size: 13px; }
+.tooltip .tt-type { color: #9FB3C8; font-family: var(--ed-font); font-size: 12px; }
+.tooltip .tt-flags { display: flex; flex-wrap: wrap; gap: 4px; margin: 5px 0 2px; }
+.tooltip .tt-flags span { background: #34404D; border-radius: 4px; padding: 0 6px; font-size: 11px; }
+.tooltip .tt-row { color: #9FB3C8; margin-top: 4px; }
+.tooltip code { color: #FFCB6B; font-family: var(--ed-font); }
+.tooltip .tt-note { margin-top: 6px; white-space: pre-wrap; color: #F5F7FA; }
+.tooltip .tt-ref { font-family: var(--ed-font); font-size: 11.5px; color: #89DDFF; margin-top: 4px; }
+.tooltip .tt-enum { margin: 2px 0 0; padding-left: 16px; }
+.tooltip .tt-enum i { color: #9FB3C8; }
+
+.toast {
+  position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); opacity: 0;
+  background: #1F2933; color: #fff; padding: 8px 14px; border-radius: 8px; font-size: 13px;
+  transition: all .2s; pointer-events: none; z-index: 50;
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+@media (max-width: 1320px) {
+  .docname { display: none; }
+}
+@media (max-width: 900px) {
+  .docname, .palette-trigger span, .hint { display: none; }
+  .palette-trigger { flex: none; }
+}
+@media (max-width: 760px) {
+  .split, .split.no-editor { grid-template-columns: minmax(0, 1fr); grid-template-rows: 40vh minmax(0, 1fr); }
+  .split > .rail, .resizer { display: none; }
+  .split > .editor-pane { grid-column: 1; grid-row: 1; }
+  .split > .canvas-pane { grid-column: 1; grid-row: 2; }
+  .split.no-editor { grid-template-rows: minmax(0, 1fr); }
+  .split.no-editor > .canvas-pane { grid-row: 1; }
+  .split.docs, .split.docs.docs-editor { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+  .split.docs > .editor-pane, .split.docs > .resizer { display: none !important; }
+  .split.docs > .docs-pane { grid-column: 1; grid-row: 1; }
+  .tabs button { padding: 4px 9px; }
+  .brand span, .status, #btn-share { display: none; }
+  .minimap { display: none; }
+}
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3" width="9" height="7" rx="1.5" fill="#2F80ED"/><rect x="13" y="14" width="9" height="7" rx="1.5" fill="#00A884"/><path d="M11 6.5h3.5a2 2 0 0 1 2 2V14" stroke="#8E9BAE" stroke-width="1.6" fill="none"/></svg>
+      <span>ERDLoom</span>
+    </div>
+    <span id="docname" class="docname"></span>
+    <div class="tabs" role="tablist" aria-label="View">
+      <button role="tab" id="tab-diagram" aria-selected="true" title="Diagram (D)">Diagram</button>
+      <button role="tab" id="tab-docs" aria-selected="false" title="Docs (D)">Docs</button>
+    </div>
+    <button id="btn-palette" class="palette-trigger" title="Search tables or run a command">
+      <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <span>Search or run a command</span><kbd id="kbd-k">⌘K</kbd>
+    </button>
+    <div id="status" class="status" role="status"></div>
+    <nav class="actions">
+      <button id="btn-import" title="Create DBML from information-schema rows (CSV or pasted text)">Import</button>
+      <button id="btn-open" title="Open a .dbml file (⌘/Ctrl+O)">Open</button>
+      <button id="btn-save" title="Download the DBML (⌘/Ctrl+S)">Save</button>
+      <div class="menu">
+        <button id="btn-export" aria-haspopup="true" aria-expanded="false">Export ▾</button>
+        <div id="export-menu" class="menu-list" role="menu" hidden>
+          <button role="menuitem" data-export="svg">Diagram as SVG</button>
+          <button role="menuitem" data-export="png">Diagram as PNG</button>
+          <button role="menuitem" data-export="docs">Docs as HTML page</button>
+          <button role="menuitem" data-export="dbml">DBML file</button>
+        </div>
+      </div>
+      <button id="btn-share" title="Copy a link that contains this diagram">Copy link</button>
+    </nav>
+    <input type="file" id="file" accept=".dbml,.txt,text/plain" hidden>
+  </header>
+
+  <main id="split" class="split">
+    <aside id="rail" class="rail" aria-label="Schema outline">
+      <div class="rail-head">
+        <input id="filter" type="search" placeholder="Filter tables and columns" aria-label="Filter tables and columns" autocomplete="off" spellcheck="false">
+      </div>
+      <div id="outline" class="outline"></div>
+    </aside>
+    <section class="pane editor-pane">
+      <div id="editor"></div>
+      <div id="error" class="errorbar" hidden></div>
+    </section>
+    <div id="resizer" class="resizer" role="separator" aria-orientation="vertical" title="Drag to resize"></div>
+    <section class="pane canvas-pane">
+      <div id="canvas" class="canvas"></div>
+      <div id="viewbar" class="viewbar"></div>
+      <div class="zoom">
+        <button id="btn-zoom-out" title="Zoom out">−</button>
+        <button id="zoom-level" title="Zoom to 100% (1)">100%</button>
+        <button id="btn-zoom-in" title="Zoom in">+</button>
+        <button id="btn-fit" title="Fit diagram to screen (F)">Fit</button>
+        <span class="zsep"></span>
+        <button id="btn-layout" title="Discard manual positions and auto-arrange">Arrange</button>
+      </div>
+      <div class="hint">⌘K for commands · drag tables (hold ⌥/Alt to skip the grid) · double-click a table for its code</div>
+    </section>
+    <section id="docs-pane" class="pane docs-pane" aria-label="Schema documentation">
+      <div id="docs" class="erd-docs"></div>
+    </section>
+  </main>
+
+  <div id="palette" class="palette" hidden>
+    <div class="palette-box" role="dialog" aria-modal="true" aria-label="Command palette">
+      <input id="palette-input" type="text" autocomplete="off" spellcheck="false" placeholder="Search tables, views and commands">
+      <div id="palette-list" class="palette-list" role="listbox"></div>
+      <div class="palette-foot"><span>↑↓ move</span><span>Enter run</span><span>Esc close</span></div>
+    </div>
+  </div>
+  <div id="import" class="modal" hidden>
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="import-title">
+      <header class="modal-head">
+        <h2 id="import-title">Import information schema</h2>
+        <button id="imp-close" class="modal-x" aria-label="Close">×</button>
+      </header>
+      <div class="modal-body">
+        <section class="imp-input">
+          <p class="imp-help">Paste rows or choose a CSV file with these six columns. The header row is optional if the columns are in this order.</p>
+          <code class="imp-cols">database_name, schema_name, table_name, column_name, data_type, is_primary_key</code>
+          <div class="imp-actions">
+            <button id="imp-file-btn">Choose CSV file…</button>
+            <button id="imp-example">Use example rows</button>
+            <span id="imp-file-name" class="imp-file"></span>
+          </div>
+          <textarea id="imp-text" spellcheck="false" wrap="off" aria-label="Information schema rows" placeholder="database_name,schema_name,table_name,column_name,data_type,is_primary_key&#10;campus,catalog,courses,id,integer,YES&#10;campus,catalog,courses,title,text,NO"></textarea>
+          <label class="imp-check"><input type="checkbox" id="imp-group" checked> Group tables by schema when there is more than one</label>
+          <input type="file" id="imp-file" accept=".csv,.tsv,.txt,text/csv,text/plain" hidden>
+        </section>
+        <section class="imp-preview" aria-live="polite">
+          <div id="imp-summary" class="imp-summary"></div>
+          <ul id="imp-issues" class="imp-issues"></ul>
+          <pre id="imp-dbml" class="imp-dbml"></pre>
+        </section>
+      </div>
+      <footer class="modal-foot">
+        <div class="imp-mode" role="radiogroup" aria-label="What to do with the result">
+          <label><input type="radio" name="imp-mode" value="replace" checked> Replace current DBML</label>
+          <label><input type="radio" name="imp-mode" value="append"> Add to current DBML</label>
+        </div>
+        <span class="spacer"></span>
+        <button id="imp-cancel">Cancel</button>
+        <button id="imp-go" class="primary">Import</button>
+      </footer>
+    </div>
+  </div>
+  <div id="toast" class="toast"></div>
+
+  <script>
+/*
+ * DBML parser — zero dependencies.
+ * Works in the browser (window.DBML) and in Node (module.exports).
+ *
+ * Supports: Project, Table (schema.name, alias, settings, note, indexes),
+ * TablePartial + ~injection, Ref (short, long, inline, composite), Enum,
+ * TableGroup, sticky Note, comments, quoted identifiers, ''' multi-line strings.
+ */
+(function (root, factory) {
+  const api = factory();
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  else root.DBML = api;
+})(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+
+  class DBMLError extends Error {
+    constructor(message, line, col) {
+      super(message);
+      this.name = 'DBMLError';
+      this.line = line || 1;
+      this.col = col || 1;
+    }
+  }
+
+  const OPS = new Set(['<', '>', '-', '<>']);
+  const PUNCT = new Set(['{', '}', '[', ']', '(', ')', ',', ':', '.', '<', '>', '-', '~', '*']);
+
+  // ---------------------------------------------------------------- tokenizer
+  function dedent(raw) {
+    const lines = raw.replace(/\r/g, '').split('\n');
+    if (lines.length && lines[0].trim() === '') lines.shift();
+    if (lines.length && lines[lines.length - 1].trim() === '') lines.pop();
+    const indents = lines.filter((l) => l.trim()).map((l) => l.match(/^[ \t]*/)[0].length);
+    const ind = indents.length ? Math.min(...indents) : 0;
+    return lines.map((l) => l.slice(ind)).join('\n');
+  }
+
+  function tokenize(src) {
+    const toks = [];
+    const n = src.length;
+    let i = 0, line = 1, col = 1;
+    const adv = (k) => {
+      for (let j = 0; j < k; j++) {
+        if (src[i] === '\n') { line++; col = 1; } else col++;
+        i++;
+      }
+    };
+    const push = (type, value, l, c) => toks.push({ type, value, line: l, col: c });
+
+    while (i < n) {
+      const ch = src[i];
+      const l = line, c = col;
+
+      if (ch === '\n') { push('nl', '\n', l, c); adv(1); continue; }
+      if (ch === ' ' || ch === '\t' || ch === '\r' || ch === '﻿') { adv(1); continue; }
+
+      if (ch === '/' && src[i + 1] === '/') { while (i < n && src[i] !== '\n') adv(1); continue; }
+      if (ch === '/' && src[i + 1] === '*') {
+        const end = src.indexOf('*/', i + 2);
+        if (end < 0) throw new DBMLError('Unterminated block comment', l, c);
+        adv(end + 2 - i);
+        continue;
+      }
+
+      if (src.startsWith("'''", i)) {
+        const end = src.indexOf("'''", i + 3);
+        if (end < 0) throw new DBMLError("Unterminated ''' string", l, c);
+        const raw = src.slice(i + 3, end);
+        adv(end + 3 - i);
+        push('string', dedent(raw), l, c);
+        continue;
+      }
+
+      if (ch === "'" || ch === '"') {
+        let j = i + 1, out = '';
+        while (j < n && src[j] !== ch) {
+          if (src[j] === '\n') throw new DBMLError('Unterminated string', l, c);
+          if (src[j] === '\\' && j + 1 < n) {
+            const e = src[j + 1];
+            out += e === 'n' ? '\n' : e === 't' ? '\t' : e;
+            j += 2;
+            continue;
+          }
+          out += src[j++];
+        }
+        if (j >= n) throw new DBMLError('Unterminated string', l, c);
+        adv(j + 1 - i);
+        push(ch === '"' ? 'qident' : 'string', out, l, c);
+        continue;
+      }
+
+      if (ch === '`') {
+        const end = src.indexOf('`', i + 1);
+        if (end < 0) throw new DBMLError('Unterminated `expression`', l, c);
+        push('expr', src.slice(i + 1, end), l, c);
+        adv(end + 1 - i);
+        continue;
+      }
+
+      if (ch === '#') {
+        const m = /^#[0-9a-fA-F]{3,8}\b/.exec(src.slice(i, i + 10));
+        if (!m) throw new DBMLError('Invalid color — expected something like #3498DB', l, c);
+        push('color', m[0], l, c);
+        adv(m[0].length);
+        continue;
+      }
+
+      if (/[\w$ -￿]/.test(ch)) {
+        const rest = src.slice(i);
+        const num = /^\d+(\.\d+)?(?![\w$ -￿])/.exec(rest);
+        if (num) { push('number', num[0], l, c); adv(num[0].length); continue; }
+        const word = /^[\w$ -￿]+/.exec(rest)[0];
+        push('ident', word, l, c);
+        adv(word.length);
+        continue;
+      }
+
+      if (ch === '<' && src[i + 1] === '>') { push('punct', '<>', l, c); adv(2); continue; }
+      if (PUNCT.has(ch)) { push('punct', ch, l, c); adv(1); continue; }
+
+      throw new DBMLError(`Unexpected character '${ch}'`, l, c);
+    }
+    return toks;
+  }
+
+  function describe(tok) {
+    switch (tok.type) {
+      case 'eof': return 'end of input';
+      case 'nl': return 'end of line';
+      case 'string': return 'a string';
+      case 'qident': return `"${tok.value}"`;
+      case 'expr': return 'an `expression`';
+      default: return `'${tok.value}'`;
+    }
+  }
+
+  // ------------------------------------------------------------------ parser
+  class Parser {
+    constructor(tokens) { this.t = tokens; this.p = 0; }
+
+    eof() {
+      const last = this.t[this.t.length - 1];
+      return { type: 'eof', value: '', line: last ? last.line : 1, col: last ? last.col + String(last.value).length : 1 };
+    }
+    peek(k = 0) { return this.t[this.p + k] || this.eof(); }
+    next() { const tok = this.peek(); if (tok.type !== 'eof') this.p++; return tok; }
+    atEnd() { return this.p >= this.t.length; }
+    skipNL() { while (this.peek().type === 'nl') this.p++; }
+    isWord(word, k = 0) { const t = this.peek(k); return t.type === 'ident' && t.value.toLowerCase() === word; }
+    isPunct(v, k = 0) { const t = this.peek(k); return t.type === 'punct' && t.value === v; }
+    isName(k = 0) { const t = this.peek(k); return t.type === 'ident' || t.type === 'qident'; }
+    isEOF() { return this.peek().type === 'eof'; }
+    error(msg, tok = this.peek()) { return new DBMLError(msg, tok.line, tok.col); }
+
+    expectPunct(v, what) {
+      if (this.isPunct(v)) return this.next();
+      throw this.error(`Expected '${v}'${what ? ' ' + what : ''} but found ${describe(this.peek())}`);
+    }
+    name(what) {
+      if (this.isName()) return this.next().value;
+      throw this.error(`Expected ${what || 'a name'} but found ${describe(this.peek())}`);
+    }
+    dottedName(what) {
+      const parts = [this.name(what)];
+      while (this.isPunct('.') && this.isName(1)) { this.next(); parts.push(this.next().value); }
+      return parts;
+    }
+    stringValue() {
+      const t = this.peek();
+      if (t.type === 'string' || t.type === 'qident') return this.next().value;
+      throw this.error(`Expected a string but found ${describe(t)}`);
+    }
+    endOfLine() {
+      const t = this.peek();
+      if (t.type === 'nl') { this.skipNL(); return; }
+      if (t.type === 'eof' || (t.type === 'punct' && t.value === '}')) return;
+      throw this.error(`Unexpected ${describe(t)}`);
+    }
+    openBlock(what) { this.skipNL(); this.expectPunct('{', what); }
+    isNoteStart() { return this.isWord('note') && (this.isPunct(':', 1) || this.isPunct('{', 1)); }
+    parseNoteBody() {
+      if (this.isPunct(':')) { this.next(); return this.stringValue(); }
+      this.expectPunct('{');
+      this.skipNL();
+      const s = this.stringValue();
+      this.skipNL();
+      this.expectPunct('}', 'to close Note');
+      return s;
+    }
+    blockEnd(open, what) {
+      this.skipNL();
+      if (this.isPunct('}')) { this.next(); return true; }
+      if (this.isEOF()) throw this.error(`Missing '}' to close ${what}`, open);
+      return false;
+    }
+
+    parse() {
+      const out = { project: null, tables: [], partials: [], refs: [], enums: [], groups: [], notes: [] };
+      for (;;) {
+        this.skipNL();
+        const tok = this.peek();
+        if (tok.type === 'eof') break;
+        if (tok.type !== 'ident') {
+          throw this.error(`Unexpected ${describe(tok)} — expected Table, Ref, Enum, TableGroup, Project or Note`);
+        }
+        switch (tok.value.toLowerCase()) {
+          case 'project': out.project = this.parseProject(); break;
+          case 'table': out.tables.push(this.parseTable(false)); break;
+          case 'tablepartial': out.partials.push(this.parseTable(true)); break;
+          case 'ref': out.refs.push(...this.parseRef()); break;
+          case 'enum': out.enums.push(this.parseEnum()); break;
+          case 'tablegroup': out.groups.push(this.parseGroup()); break;
+          case 'note': out.notes.push(this.parseStickyNote()); break;
+          case 'records': this.skipRecords(); break;
+          default: throw this.error(`Unknown keyword '${tok.value}' — expected Table, Ref, Enum, TableGroup, Project or Note`);
+        }
+      }
+      return out;
+    }
+
+    skipRecords() {
+      const kw = this.next();
+      while (!this.isPunct('{')) { if (this.isEOF()) throw this.error("Expected '{' after Records", kw); this.next(); }
+      let depth = 0;
+      do {
+        const t = this.next();
+        if (t.type === 'eof') throw this.error("Missing '}' to close Records", kw);
+        if (t.type === 'punct' && t.value === '{') depth++;
+        if (t.type === 'punct' && t.value === '}') depth--;
+      } while (depth > 0);
+    }
+
+    parseProject() {
+      const kw = this.next();
+      const proj = { name: null, note: null, settings: {}, line: kw.line };
+      if (this.isName()) proj.name = this.name();
+      this.openBlock('to open Project');
+      while (!this.blockEnd(kw, 'Project')) {
+        if (this.isNoteStart()) { this.next(); proj.note = this.parseNoteBody(); this.endOfLine(); continue; }
+        const key = this.name('a project setting');
+        this.expectPunct(':');
+        proj.settings[key] = this.next().value;
+        this.endOfLine();
+      }
+      return proj;
+    }
+
+    parseTable(partial) {
+      const kw = this.next();
+      const label = partial ? 'TablePartial' : 'table';
+      const parts = this.dottedName(`a ${label} name`);
+      const table = { parts, alias: null, settings: [], items: [], indexes: [], note: null, line: kw.line, col: kw.col, partial };
+      if (this.isWord('as')) { this.next(); table.alias = this.name('an alias'); }
+      if (this.isPunct('[')) table.settings = this.parseSettings();
+      this.openBlock(`to open ${label} '${parts.join('.')}'`);
+      while (!this.blockEnd(kw, `${label} '${parts.join('.')}'`)) {
+        const tok = this.peek();
+        if (this.isNoteStart()) {
+          this.next();
+          table.note = this.parseNoteBody();
+          this.endOfLine();
+        } else if (this.isWord('indexes') && (this.isPunct('{', 1) || this.peek(1).type === 'nl')) {
+          this.parseIndexes(table);
+        } else if (this.isPunct('~')) {
+          this.next();
+          table.items.push({ kind: 'partial', name: this.name('a TablePartial name'), line: tok.line, col: tok.col });
+          this.endOfLine();
+        } else {
+          table.items.push({ kind: 'column', column: this.parseColumn() });
+        }
+      }
+      return table;
+    }
+
+    parseColumn() {
+      const tok = this.peek();
+      const name = this.name('a column name');
+      const nt = this.peek();
+      if (nt.type === 'nl' || nt.type === 'eof' || this.isPunct('}') || this.isPunct('[')) {
+        throw this.error(`Column '${name}' is missing a type`, nt);
+      }
+      const type = this.parseType();
+      const settings = this.isPunct('[') ? this.parseSettings() : [];
+      this.endOfLine();
+      return { name, type, settings, line: tok.line, col: tok.col };
+    }
+
+    parseType() {
+      let s = this.dottedName('a column type').join('.');
+      while (this.peek().type === 'ident') s += ' ' + this.next().value; // e.g. double precision
+      if (this.isPunct('(')) {
+        const open = this.next();
+        const args = [];
+        let depth = 1, cur = '';
+        for (;;) {
+          const t = this.next();
+          if (t.type === 'eof' || t.type === 'nl') throw this.error("Missing ')' in column type", open);
+          if (t.type === 'punct' && t.value === '(') depth++;
+          if (t.type === 'punct' && t.value === ')') { depth--; if (depth === 0) break; }
+          if (t.type === 'punct' && t.value === ',' && depth === 1) { args.push(cur.trim()); cur = ''; continue; }
+          cur += t.type === 'string' ? `'${t.value}'` : t.value;
+        }
+        args.push(cur.trim());
+        s += '(' + args.join(',') + ')';
+      }
+      while (this.isPunct('[') && this.isPunct(']', 1)) { this.next(); this.next(); s += '[]'; }
+      return s;
+    }
+
+    parseSettings() {
+      const open = this.expectPunct('[');
+      const groups = [];
+      let cur = [], depth = 0;
+      for (;;) {
+        const t = this.next();
+        if (t.type === 'eof') throw this.error("Missing ']' to close settings", open);
+        if (t.type === 'nl') continue;
+        if (t.type === 'punct') {
+          if (t.value === '[' || t.value === '(') depth++;
+          else if (t.value === ')') depth--;
+          else if (t.value === ']') { if (depth === 0) break; depth--; }
+          else if (t.value === ',' && depth === 0) { groups.push(cur); cur = []; continue; }
+        }
+        cur.push(t);
+      }
+      groups.push(cur);
+      return groups.filter((g) => g.length).map(interpretSetting);
+    }
+
+    parseEndpoint() {
+      const start = this.peek();
+      const parts = [this.name('a table name')];
+      let columns = null;
+      while (this.isPunct('.')) {
+        this.next();
+        if (this.isPunct('(')) {
+          this.next();
+          columns = [];
+          for (;;) {
+            columns.push(this.name('a column name'));
+            if (this.isPunct(',')) { this.next(); continue; }
+            this.expectPunct(')', 'to close the column list');
+            break;
+          }
+          break;
+        }
+        parts.push(this.name('a column name'));
+      }
+      if (!columns) {
+        if (parts.length < 2) throw this.error(`'${parts[0]}' must be written as table.column`, start);
+        columns = [parts.pop()];
+      }
+      return { table: parts, columns, line: start.line, col: start.col };
+    }
+
+    parseRef() {
+      const kw = this.next();
+      let name = null;
+      if (this.isName()) name = this.name();
+      if (this.isPunct(':')) {
+        this.next();
+        const r = this.parseRefLine(name);
+        this.endOfLine();
+        return [r];
+      }
+      this.openBlock("after Ref — use 'Ref: a.id < b.a_id' or 'Ref { ... }'");
+      const refs = [];
+      while (!this.blockEnd(kw, 'Ref')) { refs.push(this.parseRefLine(name)); this.endOfLine(); }
+      return refs;
+    }
+
+    parseRefLine(name) {
+      const from = this.parseEndpoint();
+      const op = this.peek();
+      if (op.type !== 'punct' || !OPS.has(op.value)) {
+        throw this.error(`Expected a relationship operator (<, >, - or <>) but found ${describe(op)}`);
+      }
+      this.next();
+      const to = this.parseEndpoint();
+      const settings = this.isPunct('[') ? this.parseSettings() : [];
+      return { name, from, op: op.value, to, settings, line: from.line, col: from.col };
+    }
+
+    parseEnum() {
+      const kw = this.next();
+      const parts = this.dottedName('an enum name');
+      this.openBlock(`to open enum '${parts.join('.')}'`);
+      const values = [];
+      while (!this.blockEnd(kw, `enum '${parts.join('.')}'`)) {
+        const t = this.peek();
+        if (t.type !== 'string' && !this.isName()) throw this.error(`Expected an enum value but found ${describe(t)}`);
+        this.next();
+        const settings = this.isPunct('[') ? this.parseSettings() : [];
+        const note = settings.find((s) => s.key === 'note');
+        values.push({ name: t.value, note: note ? valueText(note.value) : null });
+        this.endOfLine();
+      }
+      return { parts, values, line: kw.line, col: kw.col };
+    }
+
+    parseGroup() {
+      const kw = this.next();
+      const name = this.dottedName('a TableGroup name').join('.');
+      const settings = this.isPunct('[') ? this.parseSettings() : [];
+      this.openBlock(`to open TableGroup '${name}'`);
+      const tables = [];
+      let note = null;
+      while (!this.blockEnd(kw, `TableGroup '${name}'`)) {
+        if (this.isNoteStart()) { this.next(); note = this.parseNoteBody(); this.endOfLine(); continue; }
+        const t = this.peek();
+        tables.push({ parts: this.dottedName('a table name'), line: t.line, col: t.col });
+        this.endOfLine();
+      }
+      return { name, settings, tables, note, line: kw.line, col: kw.col };
+    }
+
+    parseStickyNote() {
+      const kw = this.next();
+      const name = this.isName() ? this.name() : null;
+      const text = this.parseNoteBody();
+      this.endOfLine();
+      return { name, text, line: kw.line };
+    }
+
+    parseIndexes(table) {
+      const kw = this.next();
+      this.openBlock('to open indexes');
+      while (!this.blockEnd(kw, 'indexes')) {
+        const start = this.peek();
+        const columns = [];
+        if (this.isPunct('(')) {
+          this.next();
+          for (;;) {
+            this.skipNL();
+            columns.push(this.indexColumn());
+            this.skipNL();
+            if (this.isPunct(',')) { this.next(); continue; }
+            this.expectPunct(')', 'to close the index column list');
+            break;
+          }
+        } else {
+          columns.push(this.indexColumn());
+        }
+        const settings = this.isPunct('[') ? this.parseSettings() : [];
+        table.indexes.push({ columns, settings, line: start.line, col: start.col });
+        this.endOfLine();
+      }
+    }
+
+    indexColumn() {
+      const t = this.peek();
+      if (t.type === 'expr') { this.next(); return { value: t.value, expr: true }; }
+      return { value: this.name('an index column'), expr: false };
+    }
+  }
+
+  function tokensToValue(ts) {
+    if (!ts.length) return '';
+    if (ts.length === 1) {
+      const t = ts[0];
+      if (t.type === 'number') return Number(t.value);
+      if (t.type === 'expr') return { expr: t.value };
+      if (t.type === 'string') return { str: t.value };
+      return t.value;
+    }
+    if (ts.length === 2 && ts[0].value === '-' && ts[1].type === 'number') return -Number(ts[1].value);
+    return ts.map((t) => (t.type === 'string' ? `'${t.value}'` : t.type === 'expr' ? `\`${t.value}\`` : t.value)).join('');
+  }
+
+  function interpretSetting(g) {
+    const first = g[0];
+    const pos = { line: first.line, col: first.col };
+    if (first.type === 'ident' && first.value.toLowerCase() === 'ref' && g[1] && g[1].value === ':') {
+      const op = g[2];
+      if (!op || op.type !== 'punct' || !OPS.has(op.value)) {
+        const at = op || g[1];
+        throw new DBMLError("Expected a relationship operator (<, >, - or <>) after 'ref:'", at.line, at.col);
+      }
+      const sub = new Parser(g.slice(3));
+      const target = sub.parseEndpoint();
+      if (!sub.atEnd()) throw sub.error(`Unexpected ${describe(sub.peek())} in ref setting`);
+      return { key: 'ref', op: op.value, target, ...pos };
+    }
+    const ci = g.findIndex((t) => t.type === 'punct' && t.value === ':');
+    if (ci < 0) return { key: g.map((t) => t.value).join(' ').toLowerCase(), value: true, ...pos };
+    const key = g.slice(0, ci).map((t) => t.value).join(' ').toLowerCase();
+    return { key, value: tokensToValue(g.slice(ci + 1)), ...pos };
+  }
+
+  function valueText(v) {
+    if (v == null) return null;
+    if (typeof v === 'object' && 'str' in v) return v.str;
+    if (typeof v === 'object' && 'expr' in v) return v.expr;
+    return String(v);
+  }
+  function defaultText(v) {
+    if (typeof v === 'object' && v && 'str' in v) return `'${v.str}'`;
+    if (typeof v === 'object' && v && 'expr' in v) return `\`${v.expr}\``;
+    return String(v);
+  }
+
+  // ------------------------------------------------------------ model build
+  const RELATIONS = { '>': ['*', '1'], '<': ['1', '*'], '-': ['1', '1'], '<>': ['*', '*'] };
+
+  function keyOf(parts) {
+    const name = parts[parts.length - 1];
+    const schema = parts.length > 1 ? parts.slice(0, -1).join('.') : null;
+    return { name, schema, key: schema && schema !== 'public' ? `${schema}.${name}` : name };
+  }
+
+  function buildModel(ast) {
+    const partials = new Map();
+    for (const p of ast.partials) partials.set(p.parts.join('.'), p);
+
+    const tables = [];
+    const byKey = new Map();
+    const byAlias = new Map();
+    const pendingRefs = [];
+
+    function makeColumn(c, tableKey) {
+      const col = {
+        name: c.name, type: c.type, pk: false, unique: false, notNull: false, increment: false,
+        default: null, note: null, fk: false, enum: null, refs: [], line: c.line,
+      };
+      for (const s of c.settings) {
+        switch (s.key) {
+          case 'pk': case 'primary key': col.pk = true; break;
+          case 'unique': col.unique = true; break;
+          case 'not null': col.notNull = true; break;
+          case 'null': col.notNull = false; break;
+          case 'increment': col.increment = true; break;
+          case 'default': col.default = defaultText(s.value); break;
+          case 'note': col.note = valueText(s.value); break;
+          case 'ref':
+            pendingRefs.push({
+              name: null, op: s.op, settings: [], line: s.line, col: s.col,
+              from: { resolved: tableKey, columns: [c.name], line: s.line, col: s.col },
+              to: s.target,
+            });
+            break;
+          default: break; // tolerate unknown settings (check, etc.)
+        }
+      }
+      return col;
+    }
+
+    function applyTableSettings(target, settings) {
+      for (const s of settings) {
+        if (s.key === 'headercolor') target.color = valueText(s.value);
+        if (s.key === 'note') target.note = valueText(s.value);
+      }
+    }
+
+    for (const t of ast.tables) {
+      const { name, schema, key } = keyOf(t.parts);
+      if (byKey.has(key)) throw new DBMLError(`Table '${key}' is defined more than once`, t.line, t.col);
+      const table = { key, name, schema, alias: t.alias, note: null, color: null, columns: [], indexes: [], line: t.line };
+
+      const own = new Set();
+      for (const it of t.items) {
+        if (it.kind !== 'column') continue;
+        if (own.has(it.column.name)) {
+          throw new DBMLError(`Column '${it.column.name}' is defined twice in table '${key}'`, it.column.line, it.column.col);
+        }
+        own.add(it.column.name);
+      }
+
+      const colIndex = new Map();
+      const indexes = [];
+      for (const it of t.items) {
+        if (it.kind === 'partial') {
+          const p = partials.get(it.name);
+          if (!p) throw new DBMLError(`TablePartial '${it.name}' not found`, it.line, it.col);
+          applyTableSettings(table, p.settings);
+          if (p.note) table.note = p.note;
+          indexes.push(...p.indexes);
+          for (const pit of p.items) {
+            if (pit.kind !== 'column' || own.has(pit.column.name)) continue;
+            const col = makeColumn(pit.column, key);
+            if (colIndex.has(col.name)) table.columns[colIndex.get(col.name)] = col;
+            else { colIndex.set(col.name, table.columns.length); table.columns.push(col); }
+          }
+        } else {
+          colIndex.set(it.column.name, table.columns.length);
+          table.columns.push(makeColumn(it.column, key));
+        }
+      }
+      applyTableSettings(table, t.settings);
+      if (t.note) table.note = t.note;
+      indexes.push(...t.indexes);
+
+      for (const ix of indexes) {
+        const settings = {};
+        for (const s of ix.settings) settings[s.key] = s.value === true ? true : valueText(s.value);
+        const idx = { columns: ix.columns.map((c) => (c.expr ? `\`${c.value}\`` : c.value)), pk: !!(settings.pk || settings['primary key']), unique: !!settings.unique, name: settings.name || null, type: settings.type || null, note: settings.note || null };
+        for (const c of ix.columns) {
+          if (c.expr) continue;
+          const col = table.columns.find((x) => x.name === c.value);
+          if (!col) throw new DBMLError(`Index column '${c.value}' not found in table '${key}'`, ix.line, ix.col);
+          if (idx.pk) col.pk = true;
+          if (idx.unique && ix.columns.length === 1) col.unique = true;
+        }
+        table.indexes.push(idx);
+      }
+
+      byKey.set(key, table);
+      if (t.alias) byAlias.set(t.alias, table);
+      tables.push(table);
+    }
+
+    function resolveTable(parts, pos) {
+      let t;
+      if (parts.length === 1) t = byKey.get(parts[0]) || byAlias.get(parts[0]);
+      else t = byKey.get(keyOf(parts).key);
+      if (!t) throw new DBMLError(`Table '${parts.join('.')}' not found`, pos.line, pos.col);
+      return t;
+    }
+    function resolveEndpoint(ep) {
+      const table = ep.resolved ? byKey.get(ep.resolved) : resolveTable(ep.table, ep);
+      for (const c of ep.columns) {
+        if (!table.columns.some((x) => x.name === c)) {
+          throw new DBMLError(`Column '${c}' not found in table '${table.key}'`, ep.line, ep.col);
+        }
+      }
+      return table;
+    }
+
+    const refs = [];
+    for (const r of [...ast.refs, ...pendingRefs]) {
+      const ta = resolveEndpoint(r.from);
+      const tb = resolveEndpoint(r.to);
+      if (r.from.columns.length !== r.to.columns.length) {
+        throw new DBMLError('Both sides of a composite reference need the same number of columns', r.line, r.col);
+      }
+      const [ra, rb] = RELATIONS[r.op];
+      const settings = {};
+      for (const s of r.settings) settings[s.key] = valueText(s.value);
+      const ref = {
+        id: refs.length, name: r.name, op: r.op, line: r.line,
+        onDelete: settings.delete || null, onUpdate: settings.update || null, color: settings.color || null,
+        endpoints: [
+          { table: ta.key, columns: r.from.columns.slice(), relation: ra },
+          { table: tb.key, columns: r.to.columns.slice(), relation: rb },
+        ],
+      };
+      refs.push(ref);
+      ref.endpoints.forEach((ep, i) => {
+        const t = byKey.get(ep.table);
+        for (const c of ep.columns) {
+          const col = t.columns.find((x) => x.name === c);
+          col.refs.push(ref.id);
+          const other = ref.endpoints[1 - i];
+          if ((ep.relation === '*' && other.relation === '1') || (r.op === '-' && i === 0)) col.fk = true;
+        }
+      });
+    }
+
+    const enums = ast.enums.map((e) => ({ ...keyOf(e.parts), values: e.values, line: e.line }));
+    const enumByName = new Map();
+    for (const e of enums) {
+      if (enumByName.has(e.key)) throw new DBMLError(`Enum '${e.key}' is defined more than once`, e.line, 1);
+      enumByName.set(e.key, e);
+      if (e.schema) enumByName.set(`${e.schema}.${e.name}`, e);
+    }
+    for (const t of tables) {
+      for (const c of t.columns) {
+        const base = c.type.replace(/\[\]$/, '');
+        const e = enumByName.get(base) || enumByName.get(keyOf(base.split('.')).key);
+        if (e) c.enum = e.key;
+      }
+    }
+
+    const groups = ast.groups.map((g) => {
+      const settings = {};
+      for (const s of g.settings) settings[s.key] = valueText(s.value);
+      return {
+        name: g.name, note: g.note || settings.note || null, color: settings.color || null,
+        tables: g.tables.map((x) => resolveTable(x.parts, x).key), line: g.line,
+      };
+    });
+
+    return {
+      project: ast.project, tables, refs, enums, groups,
+      notes: ast.notes,
+    };
+  }
+
+  function parse(src) {
+    const tokens = tokenize(String(src));
+    const ast = new Parser(tokens).parse();
+    return buildModel(ast);
+  }
+
+  return { parse, tokenize, DBMLError };
+});
+</script>
+  <script>
+/*
+ * Automatic layout: parents (the "one" side of a ref) to the left, children to
+ * the right, ordered within each column by barycenter to reduce crossings.
+ * Disconnected parts of the schema are shelf-packed into rows.
+ */
+(function (root, factory) {
+  const api = factory();
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  else root.DBMLLayout = api;
+})(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+
+  const GAP_X = 110;
+  const GAP_Y = 44;
+  const COMP_GAP = 120;
+
+  function autoLayout(model, sizes) {
+    const keys = model.tables.map((t) => t.key);
+    const order = new Map(keys.map((k, i) => [k, i]));
+    const parents = new Map(keys.map((k) => [k, new Set()]));
+    const neighbors = new Map(keys.map((k) => [k, new Set()]));
+
+    for (const r of model.refs) {
+      let [a, b] = r.endpoints;
+      if (a.table === b.table) continue;
+      if (a.relation === '1' && b.relation === '*') [a, b] = [b, a];
+      // a = child (many side), b = parent (one side)
+      parents.get(a.table).add(b.table);
+      neighbors.get(a.table).add(b.table);
+      neighbors.get(b.table).add(a.table);
+    }
+
+    // connected components
+    const comp = new Map();
+    const comps = [];
+    for (const k of keys) {
+      if (comp.has(k)) continue;
+      const members = [];
+      const stack = [k];
+      comp.set(k, comps.length);
+      while (stack.length) {
+        const x = stack.pop();
+        members.push(x);
+        for (const y of neighbors.get(x)) if (!comp.has(y)) { comp.set(y, comps.length); stack.push(y); }
+      }
+      members.sort((p, q) => order.get(p) - order.get(q));
+      comps.push(members);
+    }
+
+    // rank = longest path from a root parent (cycles broken)
+    const rank = new Map();
+    const visiting = new Set();
+    function rankOf(k) {
+      if (rank.has(k)) return rank.get(k);
+      if (visiting.has(k)) return 0;
+      visiting.add(k);
+      let r = 0;
+      for (const p of parents.get(k)) r = Math.max(r, rankOf(p) + 1);
+      visiting.delete(k);
+      rank.set(k, r);
+      return r;
+    }
+    keys.forEach(rankOf);
+
+    const groups = (model.groups || []).map((g) => new Set(g.tables));
+    const blocks = comps.map((members) => ({ members, ...layoutComponent(members, rank, neighbors, sizes, groups) }));
+
+    // Components whose tables all sit in one TableGroup are packed together first,
+    // so each group stays in one place and its box doesn't swallow other tables.
+    const buckets = new Map();
+    for (const b of blocks) {
+      const gi = groups.findIndex((g) => b.members.every((k) => g.has(k)));
+      const key = gi >= 0 ? `g${gi}` : `c${buckets.size}`;
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push(b);
+    }
+    const merged = [...buckets.values()].map((bs) => (bs.length === 1 ? bs[0] : pack(bs, GAP_Y)));
+    const packed = pack(merged, COMP_GAP);
+    const positions = {};
+    for (const k in packed.pos) positions[k] = { x: Math.round(packed.pos[k].x), y: Math.round(packed.pos[k].y) };
+    return positions;
+  }
+
+  // Shelf-pack blocks (biggest first) into rows about as wide as a square of their area.
+  function pack(blocks, gap) {
+    const sorted = blocks.slice().sort((p, q) => q.w * q.h - p.w * p.h);
+    const area = sorted.reduce((a, b) => a + (b.w + gap) * (b.h + gap), 0);
+    const maxRowW = Math.max(sorted.length ? sorted[0].w : 0, Math.sqrt(area) * 1.6);
+    const pos = {};
+    let x = 0, y = 0, rowH = 0, w = 0;
+    for (const b of sorted) {
+      if (x > 0 && x + b.w > maxRowW) { x = 0; y += rowH + gap; rowH = 0; }
+      for (const k in b.pos) pos[k] = { x: b.pos[k].x + x, y: b.pos[k].y + y };
+      w = Math.max(w, x + b.w);
+      x += b.w + gap;
+      rowH = Math.max(rowH, b.h);
+    }
+    return { pos, w, h: y + rowH, members: sorted.flatMap((b) => b.members || Object.keys(b.pos)) };
+  }
+
+  function layoutComponent(members, rank, neighbors, sizes, groups) {
+    const minRank = Math.min(...members.map((k) => rank.get(k)));
+    const cols = [];
+    for (const k of members) {
+      const r = rank.get(k) - minRank;
+      (cols[r] = cols[r] || []).push(k);
+    }
+    for (let i = 0; i < cols.length; i++) cols[i] = cols[i] || [];
+
+    // barycenter sweeps
+    const idx = new Map();
+    const reindex = () => cols.forEach((c) => c.forEach((k, i) => idx.set(k, i)));
+    reindex();
+    for (let pass = 0; pass < 4; pass++) {
+      const range = pass % 2 === 0 ? [...cols.keys()].slice(1) : [...cols.keys()].reverse().slice(1);
+      for (const ci of range) {
+        const bary = new Map();
+        for (const k of cols[ci]) {
+          const ns = [...neighbors.get(k)].filter((n) => idx.has(n) && n !== k);
+          bary.set(k, ns.length ? ns.reduce((s, n) => s + idx.get(n), 0) / ns.length : idx.get(k));
+        }
+        cols[ci].sort((a, b) => bary.get(a) - bary.get(b));
+        reindex();
+      }
+    }
+
+    const heights = cols.map((c) => c.reduce((s, k) => s + sizes[k].h, 0) + GAP_Y * Math.max(0, c.length - 1));
+    const H = Math.max(...heights);
+    const pos = {};
+    let x = 0;
+    cols.forEach((c, ci) => {
+      const w = Math.max(...c.map((k) => sizes[k].w), 0);
+      let y = (H - heights[ci]) / 2;
+      for (const k of c) { pos[k] = { x, y }; y += sizes[k].h + GAP_Y; }
+      x += w + GAP_X;
+    });
+    separateGroups(cols, pos, sizes, groups);
+    const ys = members.map((k) => pos[k].y);
+    const top = Math.min(...ys);
+    for (const k of members) pos[k].y -= top;
+    const h = Math.max(...members.map((k) => pos[k].y + sizes[k].h));
+    return { pos, w: Math.max(0, x - GAP_X), h };
+  }
+
+  // Push tables that aren't in a TableGroup out of that group's box, then re-stack columns.
+  function separateGroups(cols, pos, sizes, groups) {
+    const PAD = 22, TOP = 30;
+    for (let iter = 0; iter < 6; iter++) {
+      let changed = false;
+      for (const g of groups) {
+        const ms = [...g].filter((k) => pos[k]);
+        if (!ms.length) continue;
+        const x0 = Math.min(...ms.map((k) => pos[k].x)) - PAD;
+        const y0 = Math.min(...ms.map((k) => pos[k].y)) - PAD - TOP;
+        const x1 = Math.max(...ms.map((k) => pos[k].x + sizes[k].w)) + PAD;
+        const y1 = Math.max(...ms.map((k) => pos[k].y + sizes[k].h)) + PAD;
+        for (const k in pos) {
+          if (g.has(k)) continue;
+          const p = pos[k], s = sizes[k];
+          if (p.x < x1 && p.x + s.w > x0 && p.y < y1 && p.y + s.h > y0) {
+            p.y = y1 + GAP_Y / 2;
+            changed = true;
+          }
+        }
+      }
+      for (const c of cols) {
+        c.sort((a, b) => pos[a].y - pos[b].y);
+        for (let i = 1; i < c.length; i++) {
+          const prev = pos[c[i - 1]], min = prev.y + sizes[c[i - 1]].h + GAP_Y;
+          if (pos[c[i]].y < min) { pos[c[i]].y = min; changed = true; }
+        }
+      }
+      if (!changed) break;
+    }
+  }
+
+  return { autoLayout };
+});
+</script>
+  <script>
+/*
+ * SVG diagram renderer with drag, pan, zoom, hover highlighting, tooltips and export.
+ */
+(function (root) {
+  'use strict';
+
+  const NS = 'http://www.w3.org/2000/svg';
+  const FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif';
+  const MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+  const M = { headerH: 38, rowH: 28, padX: 12, iconW: 20, gap: 28, minW: 190, radius: 8 };
+  const C = {
+    header: '#2F5D8A', body: '#FFFFFF', alt: '#F7F9FB', border: '#D3DCE6', sep: '#EDF1F5',
+    name: '#1F2933', type: '#6B7785', enumType: '#8E44AD', pk: '#D4A017', fk: '#2F80ED',
+    ref: '#8E9BAE', note: '#9AA5B1',
+  };
+
+  function el(tag, attrs, parent) {
+    const e = document.createElementNS(NS, tag);
+    if (attrs) for (const k in attrs) if (attrs[k] != null) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function text(parent, x, y, str, attrs) {
+    const t = el('text', Object.assign({ x, y, 'dominant-baseline': 'central', 'font-family': FONT }, attrs), parent);
+    t.textContent = str;
+    return t;
+  }
+
+  let ctx2d;
+  function textW(s, font) {
+    ctx2d = ctx2d || document.createElement('canvas').getContext('2d');
+    ctx2d.font = font;
+    return ctx2d.measureText(s).width;
+  }
+
+  function readable(hex) {
+    const h = hex.replace('#', '');
+    const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h.slice(0, 6);
+    const n = parseInt(full, 16);
+    if (Number.isNaN(n)) return '#fff';
+    const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    return 0.299 * r + 0.587 * g + 0.114 * b > 170 ? '#1F2933' : '#FFFFFF';
+  }
+
+  function tableTitle(t) { return t.schema && t.schema !== 'public' ? `${t.schema}.${t.name}` : t.name; }
+
+  // Rows shown for a table: every column, or only key columns in compact mode.
+  function displayRows(t, compact) {
+    if (!compact) return { rows: t.columns, hidden: 0 };
+    const rows = t.columns.filter((c) => c.pk || c.fk);
+    return { rows, hidden: t.columns.length - rows.length };
+  }
+
+  function measureTables(model, compact) {
+    const sizes = {};
+    for (const t of model.tables) {
+      let w = textW(tableTitle(t), `600 14px ${FONT}`) + M.padX * 2 + (t.note ? 22 : 0);
+      for (const c of t.columns) {
+        w = Math.max(w, M.padX + M.iconW + textW(c.name, `${c.pk ? 600 : 400} 13px ${FONT}`) + (c.note ? 12 : 0) +
+          M.gap + textW(c.type, `12px ${MONO}`) + M.padX);
+      }
+      const { rows, hidden } = displayRows(t, compact);
+      sizes[t.key] = { w: Math.ceil(Math.max(M.minW, w)), h: M.headerH + Math.max(1, rows.length + (hidden ? 1 : 0)) * M.rowH };
+    }
+    return sizes;
+  }
+
+  function roundedPath(pts, r) {
+    let d = `M${pts[0].x},${pts[0].y}`;
+    for (let i = 1; i < pts.length - 1; i++) {
+      const p = pts[i - 1], c = pts[i], n = pts[i + 1];
+      const d1 = Math.hypot(c.x - p.x, c.y - p.y), d2 = Math.hypot(n.x - c.x, n.y - c.y);
+      const rr = Math.min(r, d1 / 2, d2 / 2);
+      if (rr < 0.5) { d += ` L${c.x},${c.y}`; continue; }
+      const a = { x: c.x + ((p.x - c.x) / d1) * rr, y: c.y + ((p.y - c.y) / d1) * rr };
+      const b = { x: c.x + ((n.x - c.x) / d2) * rr, y: c.y + ((n.y - c.y) / d2) * rr };
+      d += ` L${a.x},${a.y} Q${c.x},${c.y} ${b.x},${b.y}`;
+    }
+    const last = pts[pts.length - 1];
+    return d + ` L${last.x},${last.y}`;
+  }
+
+  function marker(x, y, dir, relation) {
+    if (relation === '*') {
+      const tip = x + dir * 13;
+      return `M${tip},${y} L${x},${y - 7} M${tip},${y} L${x},${y} M${tip},${y} L${x},${y + 7}`;
+    }
+    const bx = x + dir * 9;
+    return `M${bx},${y - 6} L${bx},${y + 6}`;
+  }
+
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  }
+
+  class Diagram {
+    constructor(container, opts) {
+      this.container = container;
+      this.opts = opts || {};
+      this.model = null;
+      this.positions = {};
+      this.view = { x: 40, y: 40, k: 1 };
+      this.selected = null;
+      this.visible = null;      // Set of table keys to draw, or null for all
+      this.keysOnly = false;    // compact rows on demand
+      this.compact = false;     // effective compact state (keysOnly or zoomed out)
+      this.compactBelow = 0.5;  // zoom level under which tables collapse to key columns
+      this.grid = 22;           // snap size, matches the dotted background
+
+      this.svg = el('svg', { class: 'diagram', xmlns: NS }, container);
+      const defs = el('defs', null, this.svg);
+      const f = el('filter', { id: 'dbml-shadow', x: '-10%', y: '-10%', width: '120%', height: '130%' }, defs);
+      el('feDropShadow', { dx: 0, dy: 2, stdDeviation: 3, 'flood-color': '#1F2933', 'flood-opacity': 0.12 }, f);
+      this.viewport = el('g', { class: 'viewport' }, this.svg);
+      this.gGroups = el('g', { class: 'groups' }, this.viewport);
+      this.gRefs = el('g', { class: 'refs' }, this.viewport);
+      this.gTables = el('g', { class: 'tables' }, this.viewport);
+
+      this.tip = document.createElement('div');
+      this.tip.className = 'tooltip';
+      container.appendChild(this.tip);
+
+      this.mini = document.createElement('div');
+      this.mini.className = 'minimap';
+      this.mini.setAttribute('aria-label', 'Minimap — click or drag to move the view');
+      this.miniSvg = el('svg', { width: '100%', height: '100%' }, this.mini);
+      container.appendChild(this.mini);
+      this.bindMinimap();
+
+      this.bind();
+      this.applyView();
+    }
+
+    // ------------------------------------------------------------ rendering
+    setModel(model, positions) {
+      this.model = model;
+      this.positions = positions;
+      this.tables = new Map(model.tables.map((t) => [t.key, t]));
+      this.enums = new Map(model.enums.map((e) => [e.key, e]));
+      if (this.selected && !this.tables.has(this.selected)) this.selected = null;
+      if (this.visible) this.visible = new Set([...this.visible].filter((k) => this.tables.has(k)));
+      this.draw();
+    }
+
+    isVisible(key) { return !this.visible || this.visible.has(key); }
+    visibleTables() { return this.model ? this.model.tables.filter((t) => this.isVisible(t.key)) : []; }
+
+    setVisible(keys) {
+      this.visible = keys ? new Set(keys) : null;
+      if (this.selected && !this.isVisible(this.selected)) this.selected = null;
+      if (this.model) this.draw();
+    }
+    setKeysOnly(on) { this.keysOnly = !!on; if (this.model) this.draw(); }
+
+    draw() {
+      if (!this.model) return;
+      this.compact = this.keysOnly || this.view.k < this.compactBelow;
+      this.sizes = measureTables(this.model, this.compact);
+      this.gTables.textContent = '';
+      this.tableEls = new Map();
+      for (const t of this.visibleTables()) this.drawTable(t);
+      this.drawRefs();
+      this.drawGroups();
+      this.refreshHighlight();
+      this.drawMinimap();
+      if (this.opts.onDraw) this.opts.onDraw();
+    }
+
+    drawTable(t) {
+      const p = this.positions[t.key], s = this.sizes[t.key];
+      const g = el('g', { class: 'table', 'data-key': t.key, transform: `translate(${p.x},${p.y})` }, this.gTables);
+      this.tableEls.set(t.key, g);
+      const color = t.color || C.header;
+
+      el('rect', { x: 0, y: 0, width: s.w, height: s.h, rx: M.radius, fill: C.body, filter: 'url(#dbml-shadow)' }, g);
+      const head = el('g', { class: 'table-header' }, g);
+      el('path', {
+        d: `M0,${M.headerH} V${M.radius} Q0,0 ${M.radius},0 H${s.w - M.radius} Q${s.w},0 ${s.w},${M.radius} V${M.headerH} Z`,
+        fill: color,
+      }, head);
+      const fg = readable(color);
+      text(head, M.padX, M.headerH / 2, tableTitle(t), { fill: fg, 'font-size': 14, 'font-weight': 600 });
+      if (t.note) {
+        const ix = s.w - M.padX - 7;
+        const ng = el('g', { class: 'note-icon', 'data-note': 'table' }, head);
+        el('circle', { cx: ix, cy: M.headerH / 2, r: 7, fill: 'none', stroke: fg, 'stroke-opacity': 0.8, 'stroke-width': 1.3 }, ng);
+        text(ng, ix, M.headerH / 2 + 0.5, 'i', { fill: fg, 'font-size': 10, 'font-weight': 700, 'text-anchor': 'middle', 'font-family': 'Georgia, serif' });
+      }
+
+      const shown = displayRows(t, this.compact);
+      const rows = shown.rows.slice();
+      if (shown.hidden) rows.push({ more: shown.hidden });
+      if (!rows.length) rows.push(null);
+      rows.forEach((c, i) => {
+        const y = M.headerH + i * M.rowH;
+        const last = i === rows.length - 1;
+        const row = el('g', { class: 'row', 'data-col': c && c.name ? c.name : '', transform: `translate(0,${y})` }, g);
+        const bg = i % 2 ? C.alt : C.body;
+        if (last) {
+          el('path', {
+            class: 'row-bg', fill: bg,
+            d: `M0,0 H${s.w} V${M.rowH - M.radius} Q${s.w},${M.rowH} ${s.w - M.radius},${M.rowH} H${M.radius} Q0,${M.rowH} 0,${M.rowH - M.radius} Z`,
+          }, row);
+        } else {
+          el('rect', { class: 'row-bg', x: 0, y: 0, width: s.w, height: M.rowH, fill: bg }, row);
+        }
+        if (i > 0) el('line', { x1: 0, x2: s.w, y1: 0, y2: 0, stroke: C.sep }, row);
+        const cy = M.rowH / 2;
+        if (!c || c.more) {
+          const label = !c ? 'no columns' : `+ ${c.more} more column${c.more === 1 ? '' : 's'}`;
+          text(row, M.padX, cy, label, { fill: C.note, 'font-size': 12, 'font-style': 'italic' });
+          return;
+        }
+        const ix = M.padX + 5;
+        if (c.pk) {
+          el('circle', { cx: ix - 1, cy, r: 3.4, fill: 'none', stroke: C.pk, 'stroke-width': 1.8 }, row);
+          el('path', { d: `M${ix + 2.4},${cy} H${ix + 9} M${ix + 7},${cy} V${cy + 3} M${ix + 9},${cy} V${cy + 2.6}`, stroke: C.pk, 'stroke-width': 1.8, fill: 'none', 'stroke-linecap': 'round' }, row);
+        } else if (c.fk) {
+          el('path', { d: `M${ix - 4},${cy} H${ix + 6} M${ix + 2.5},${cy - 3.5} L${ix + 6},${cy} L${ix + 2.5},${cy + 3.5}`, stroke: C.fk, 'stroke-width': 1.7, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, row);
+        }
+        const nx = M.padX + M.iconW;
+        const nameEl = text(row, nx, cy, c.name, { fill: C.name, 'font-size': 13, 'font-weight': c.pk ? 600 : 400 });
+        if (c.note) {
+          const w = textW(c.name, `${c.pk ? 600 : 400} 13px ${FONT}`);
+          el('circle', { cx: nx + w + 6, cy: cy - 4, r: 2.2, fill: C.note }, row);
+        }
+        nameEl.setAttribute('class', 'col-name');
+        text(row, s.w - M.padX, cy, c.type, {
+          fill: c.enum ? C.enumType : C.type, 'font-size': 12, 'font-family': MONO, 'text-anchor': 'end',
+        });
+      });
+
+      el('rect', { x: 0.5, y: 0.5, width: s.w - 1, height: s.h - 1, rx: M.radius, fill: 'none', stroke: C.border, class: 'table-outline' }, g);
+    }
+
+    anchor(key, columns) {
+      const t = this.tables.get(key), p = this.positions[key], s = this.sizes[key];
+      const rows = displayRows(t, this.compact).rows;
+      const idx = columns.map((c) => rows.findIndex((x) => x.name === c)).filter((i) => i >= 0);
+      const mean = idx.length ? idx.reduce((a, b) => a + b, 0) / idx.length : -0.9;
+      return { left: p.x, right: p.x + s.w, y: p.y + M.headerH + mean * M.rowH + M.rowH / 2 };
+    }
+
+    // Pick an x for the vertical segment between x0 and x1 that doesn't cross a table.
+    lane(x0, x1, y0, y1) {
+      const lo = Math.min(y0, y1), hi = Math.max(y0, y1);
+      const blocked = (x) => this.visibleTables().some((t) => {
+        const p = this.positions[t.key], s = this.sizes[t.key];
+        return x > p.x - 8 && x < p.x + s.w + 8 && hi > p.y && lo < p.y + s.h;
+      });
+      const mid = (x0 + x1) / 2;
+      const candidates = [mid];
+      for (let d = 16; d < (x1 - x0) / 2 - 20; d += 16) candidates.push(mid - d, mid + d);
+      return candidates.find((x) => !blocked(x)) ?? mid;
+    }
+
+    drawRefs() {
+      this.gRefs.textContent = '';
+      // spread multiple lines that leave the same side of the same row
+      for (const r of this.model.refs) {
+        const [ea, eb] = r.endpoints;
+        if (!this.isVisible(ea.table) || !this.isVisible(eb.table)) continue;
+        const a = this.anchor(ea.table, ea.columns), b = this.anchor(eb.table, eb.columns);
+        const self = ea.table === eb.table;
+        const out = 26;
+        let pts, da, db, xa, xb;
+        if (!self && a.right + out * 2 <= b.left) {
+          xa = a.right; xb = b.left; da = 1; db = -1;
+          const mx = this.lane(xa, xb, a.y, b.y);
+          pts = [{ x: xa, y: a.y }, { x: mx, y: a.y }, { x: mx, y: b.y }, { x: xb, y: b.y }];
+        } else if (!self && b.right + out * 2 <= a.left) {
+          xa = a.left; xb = b.right; da = -1; db = 1;
+          const mx = this.lane(xb, xa, a.y, b.y);
+          pts = [{ x: xa, y: a.y }, { x: mx, y: a.y }, { x: mx, y: b.y }, { x: xb, y: b.y }];
+        } else {
+          // overlapping horizontally (or self reference): loop around the nearer side
+          const useRight = self || Math.abs(a.right - b.right) <= Math.abs(a.left - b.left) || a.right > b.left;
+          if (useRight) {
+            xa = a.right; xb = b.right; da = db = 1;
+            const x = Math.max(xa, xb) + out * 1.4;
+            pts = [{ x: xa, y: a.y }, { x, y: a.y }, { x, y: b.y }, { x: xb, y: b.y }];
+          } else {
+            xa = a.left; xb = b.left; da = db = -1;
+            const x = Math.min(xa, xb) - out * 1.4;
+            pts = [{ x: xa, y: a.y }, { x, y: a.y }, { x, y: b.y }, { x: xb, y: b.y }];
+          }
+        }
+        const d = roundedPath(pts, 10);
+        const color = r.color || C.ref;
+        const g = el('g', { class: 'ref', 'data-ref': r.id }, this.gRefs);
+        el('path', { class: 'ref-hit', d, fill: 'none', stroke: 'transparent', 'stroke-width': 12 }, g);
+        el('path', { class: 'ref-line', d, fill: 'none', stroke: color, 'stroke-width': 1.6 }, g);
+        el('path', { class: 'ref-line', d: marker(xa, a.y, da, ea.relation) + ' ' + marker(xb, b.y, db, eb.relation), fill: 'none', stroke: color, 'stroke-width': 1.6, 'stroke-linecap': 'round' }, g);
+      }
+    }
+
+    drawGroups() {
+      this.gGroups.textContent = '';
+      for (const grp of this.model.groups) {
+        const ks = grp.tables.filter((k) => this.positions[k] && this.isVisible(k));
+        if (!ks.length) continue;
+        const pad = 22, top = 30;
+        const x0 = Math.min(...ks.map((k) => this.positions[k].x)) - pad;
+        const y0 = Math.min(...ks.map((k) => this.positions[k].y)) - pad - top;
+        const x1 = Math.max(...ks.map((k) => this.positions[k].x + this.sizes[k].w)) + pad;
+        const y1 = Math.max(...ks.map((k) => this.positions[k].y + this.sizes[k].h)) + pad;
+        const color = grp.color || '#7F8FA6';
+        const g = el('g', { class: 'group' }, this.gGroups);
+        el('rect', { x: x0, y: y0, width: x1 - x0, height: y1 - y0, rx: 14, fill: color, 'fill-opacity': 0.07, stroke: color, 'stroke-opacity': 0.45, 'stroke-dasharray': '6 4' }, g);
+        text(g, x0 + 16, y0 + 18, grp.name, { fill: color, 'font-size': 13, 'font-weight': 600 });
+      }
+    }
+
+    // --------------------------------------------------------- highlighting
+    refreshHighlight(hoverTable, hoverRef, hoverCol) {
+      const svg = this.svg;
+      svg.querySelectorAll('.active').forEach((n) => n.classList.remove('active'));
+      svg.querySelectorAll('.row.hl').forEach((n) => n.classList.remove('hl'));
+      const focusTable = hoverTable || this.selected;
+      if (!this.model || (!focusTable && hoverRef == null)) { svg.classList.remove('focus'); return; }
+      svg.classList.add('focus');
+      const refs = [];
+      if (hoverRef != null) refs.push(this.model.refs[hoverRef]);
+      else if (hoverCol) {
+        const ft = this.tables.get(focusTable);
+        const col = ft && ft.columns.find((c) => c.name === hoverCol);
+        (col ? col.refs : []).forEach((id) => refs.push(this.model.refs[id]));
+        const fe = this.tableEls.get(focusTable);
+        if (fe) fe.classList.add('active');
+      } else {
+        this.model.refs.forEach((r) => { if (r.endpoints.some((e) => e.table === focusTable)) refs.push(r); });
+        const fe = this.tableEls.get(focusTable);
+        if (fe) fe.classList.add('active');
+      }
+      for (const r of refs) {
+        const g = this.gRefs.querySelector(`[data-ref="${r.id}"]`);
+        if (g) g.classList.add('active');
+        for (const e of r.endpoints) {
+          const tg = this.tableEls.get(e.table);
+          if (!tg) continue;
+          tg.classList.add('active');
+          if (hoverCol || hoverRef != null) {
+            for (const c of e.columns) {
+              const row = tg.querySelector(`.row[data-col="${CSS.escape(c)}"]`);
+              if (row) row.classList.add('hl');
+            }
+          }
+        }
+      }
+    }
+
+    // -------------------------------------------------------------- tooltip
+    showTip(html, ev) {
+      this.tip.innerHTML = html;
+      this.tip.style.display = 'block';
+      const r = this.container.getBoundingClientRect();
+      let x = ev.clientX - r.left + 14, y = ev.clientY - r.top + 14;
+      const tw = this.tip.offsetWidth, th = this.tip.offsetHeight;
+      if (x + tw > r.width - 8) x = ev.clientX - r.left - tw - 14;
+      if (y + th > r.height - 8) y = ev.clientY - r.top - th - 14;
+      this.tip.style.left = `${Math.max(4, x)}px`;
+      this.tip.style.top = `${Math.max(4, y)}px`;
+    }
+    hideTip() { this.tip.style.display = 'none'; }
+
+    columnTip(t, c) {
+      const flags = [];
+      if (c.pk) flags.push('primary key');
+      if (c.fk) flags.push('foreign key');
+      if (c.unique) flags.push('unique');
+      if (c.notNull) flags.push('not null');
+      if (c.increment) flags.push('increment');
+      let h = `<div class="tt-title">${esc(tableTitle(t))}.<b>${esc(c.name)}</b></div><div class="tt-type">${esc(c.type)}</div>`;
+      if (flags.length) h += `<div class="tt-flags">${flags.map((f) => `<span>${f}</span>`).join('')}</div>`;
+      if (c.default != null) h += `<div class="tt-row">default <code>${esc(c.default)}</code></div>`;
+      if (c.note) h += `<div class="tt-note">${esc(c.note)}</div>`;
+      if (c.enum) {
+        const e = this.enums.get(c.enum);
+        h += `<div class="tt-row">enum values</div><ul class="tt-enum">${e.values.map((v) => `<li>${esc(v.name)}${v.note ? ` <i>— ${esc(v.note)}</i>` : ''}</li>`).join('')}</ul>`;
+      }
+      for (const id of c.refs) h += `<div class="tt-ref">${esc(this.refText(this.model.refs[id]))}</div>`;
+      return h;
+    }
+    refText(r) {
+      const side = (e) => `${e.table}.${e.columns.length > 1 ? `(${e.columns.join(', ')})` : e.columns[0]}`;
+      const [a, b] = r.endpoints;
+      let s = `${side(a)} ${r.op} ${side(b)}`;
+      if (r.onDelete) s += `  · on delete ${r.onDelete}`;
+      if (r.onUpdate) s += `  · on update ${r.onUpdate}`;
+      return s;
+    }
+
+    // --------------------------------------------------------- interaction
+    bind() {
+      const svg = this.svg;
+      let drag = null;
+
+      svg.addEventListener('pointerdown', (ev) => {
+        if (ev.button !== 0) return;
+        const tg = ev.target.closest('.table');
+        if (tg) {
+          const key = tg.getAttribute('data-key');
+          const p = this.positions[key];
+          drag = { type: 'table', key, sx: ev.clientX, sy: ev.clientY, ox: p.x, oy: p.y, moved: false, el: tg };
+          this.gTables.appendChild(tg); // bring to front
+        } else {
+          drag = { type: 'pan', sx: ev.clientX, sy: ev.clientY, ox: this.view.x, oy: this.view.y, moved: false };
+          svg.classList.add('panning');
+        }
+        svg.setPointerCapture(ev.pointerId);
+        this.hideTip();
+      });
+
+      svg.addEventListener('pointermove', (ev) => {
+        if (drag) {
+          const dx = ev.clientX - drag.sx, dy = ev.clientY - drag.sy;
+          if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true;
+          if (!drag.moved) return;
+          if (drag.type === 'table') {
+            const p = this.positions[drag.key];
+            const g = ev.altKey ? 1 : this.grid; // hold Alt/Option to place freely
+            p.x = Math.round((drag.ox + dx / this.view.k) / g) * g;
+            p.y = Math.round((drag.oy + dy / this.view.k) / g) * g;
+            drag.el.setAttribute('transform', `translate(${p.x},${p.y})`);
+            this.drawRefs();
+            this.drawGroups();
+            this.drawMinimap();
+            this.refreshHighlight(drag.key);
+          } else {
+            this.view.x = drag.ox + dx;
+            this.view.y = drag.oy + dy;
+            this.applyView();
+          }
+          return;
+        }
+        this.hover(ev);
+      });
+
+      const end = (ev) => {
+        if (!drag) return;
+        svg.classList.remove('panning');
+        if (drag.type === 'table') {
+          if (drag.moved) { if (this.opts.onPositionsChange) this.opts.onPositionsChange(this.positions); }
+          else {
+            this.selected = this.selected === drag.key ? null : drag.key;
+            this.refreshHighlight();
+            if (this.opts.onSelect) this.opts.onSelect(this.selected ? this.tables.get(this.selected) : null, ev);
+          }
+        } else if (!drag.moved && this.selected) {
+          this.selected = null;
+          this.refreshHighlight();
+          if (this.opts.onSelect) this.opts.onSelect(null, ev);
+        }
+        drag = null;
+      };
+      svg.addEventListener('pointerup', end);
+      svg.addEventListener('pointercancel', end);
+      svg.addEventListener('pointerleave', () => { if (!drag) { this.hideTip(); this.refreshHighlight(); } });
+
+      svg.addEventListener('dblclick', (ev) => {
+        const tg = ev.target.closest('.table');
+        if (tg && this.opts.onOpen) {
+          const t = this.tables.get(tg.getAttribute('data-key'));
+          const row = ev.target.closest('.row');
+          const col = row && t.columns.find((c) => c.name === row.getAttribute('data-col'));
+          this.opts.onOpen(t, col);
+        }
+      });
+
+      svg.addEventListener('wheel', (ev) => {
+        ev.preventDefault();
+        const r = svg.getBoundingClientRect();
+        if (ev.ctrlKey || ev.metaKey) {
+          this.zoomAt(Math.exp(-ev.deltaY * 0.01), ev.clientX - r.left, ev.clientY - r.top);
+        } else {
+          this.view.x -= ev.deltaX;
+          this.view.y -= ev.deltaY;
+          this.applyView();
+        }
+      }, { passive: false });
+    }
+
+    hover(ev) {
+      if (!this.model) return;
+      const refEl = ev.target.closest('.ref');
+      if (refEl) {
+        const r = this.model.refs[+refEl.getAttribute('data-ref')];
+        this.refreshHighlight(null, r.id);
+        this.showTip(`<div class="tt-ref">${esc(this.refText(r))}</div>`, ev);
+        return;
+      }
+      const tg = ev.target.closest('.table');
+      if (!tg) { this.hideTip(); this.refreshHighlight(); return; }
+      const t = this.tables.get(tg.getAttribute('data-key'));
+      const row = ev.target.closest('.row');
+      const col = row && t.columns.find((c) => c.name === row.getAttribute('data-col'));
+      if (col) {
+        this.refreshHighlight(t.key, null, col.name);
+        this.showTip(this.columnTip(t, col), ev);
+      } else {
+        this.refreshHighlight(t.key);
+        if (ev.target.closest('.table-header') && (t.note || t.alias)) {
+          let h = `<div class="tt-title"><b>${esc(tableTitle(t))}</b>${t.alias ? ` <span class="tt-type">as ${esc(t.alias)}</span>` : ''}</div>`;
+          if (t.note) h += `<div class="tt-note">${esc(t.note)}</div>`;
+          this.showTip(h, ev);
+        } else this.hideTip();
+      }
+    }
+
+    applyView() {
+      const { x, y, k } = this.view;
+      this.viewport.setAttribute('transform', `translate(${x},${y}) scale(${k})`);
+      this.container.style.backgroundPosition = `${x}px ${y}px`;
+      this.container.style.backgroundSize = `${22 * k}px ${22 * k}px`;
+      if (this.opts.onZoom) this.opts.onZoom(k);
+      if (this.model && (this.keysOnly || k < this.compactBelow) !== this.compact) this.draw();
+      else this.drawMinimap();
+    }
+
+    zoomTo(k) {
+      const r = this.svg.getBoundingClientRect();
+      this.zoomAt(k / this.view.k, r.width / 2, r.height / 2);
+    }
+
+    select(key) {
+      this.selected = key;
+      this.refreshHighlight();
+    }
+
+    // ------------------------------------------------------------- minimap
+    worldBounds() {
+      const ts = this.visibleTables();
+      if (!ts.length) return null;
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (const t of ts) {
+        const p = this.positions[t.key], s = this.sizes[t.key];
+        x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y);
+        x1 = Math.max(x1, p.x + s.w); y1 = Math.max(y1, p.y + s.h);
+      }
+      return { x0, y0, x1, y1 };
+    }
+
+    drawMinimap() {
+      const svg = this.miniSvg;
+      svg.textContent = '';
+      const b = this.model && this.worldBounds();
+      this.mini.classList.toggle('empty', !b);
+      if (!b) return;
+      const r = this.svg.getBoundingClientRect();
+      const { x, y, k } = this.view;
+      const vw = { x0: -x / k, y0: -y / k, x1: (r.width - x) / k, y1: (r.height - y) / k };
+      // Frame the tables; the viewport rectangle is clipped by the minimap's edges.
+      const pad = 60;
+      const X0 = b.x0 - pad, Y0 = b.y0 - pad, X1 = b.x1 + pad, Y1 = b.y1 + pad;
+      const W = this.mini.clientWidth || 168, H = this.mini.clientHeight || 112;
+      const sc = Math.min(W / (X1 - X0), H / (Y1 - Y0));
+      const ox = (W - (X1 - X0) * sc) / 2, oy = (H - (Y1 - Y0) * sc) / 2;
+      this.miniMap = { X0, Y0, sc, ox, oy };
+      const tx = (v) => ox + (v - X0) * sc, ty = (v) => oy + (v - Y0) * sc;
+      for (const t of this.visibleTables()) {
+        const p = this.positions[t.key], s = this.sizes[t.key];
+        el('rect', {
+          x: tx(p.x), y: ty(p.y), width: Math.max(2, s.w * sc), height: Math.max(2, s.h * sc), rx: 1.5,
+          fill: t.color || C.header, 'fill-opacity': t.key === this.selected ? 0.9 : 0.45,
+        }, svg);
+      }
+      el('rect', {
+        class: 'mini-view', x: tx(vw.x0), y: ty(vw.y0), width: (vw.x1 - vw.x0) * sc, height: (vw.y1 - vw.y0) * sc,
+        fill: 'rgba(47,128,237,.08)', stroke: '#2F80ED', 'stroke-width': 1.2, rx: 2,
+      }, svg);
+    }
+
+    bindMinimap() {
+      let down = false;
+      const move = (ev) => {
+        const m = this.miniMap;
+        if (!m) return;
+        const rr = this.mini.getBoundingClientRect();
+        const wx = m.X0 + (ev.clientX - rr.left - m.ox) / m.sc;
+        const wy = m.Y0 + (ev.clientY - rr.top - m.oy) / m.sc;
+        const r = this.svg.getBoundingClientRect();
+        this.view.x = r.width / 2 - wx * this.view.k;
+        this.view.y = r.height / 2 - wy * this.view.k;
+        this.applyView();
+      };
+      this.mini.addEventListener('pointerdown', (ev) => { down = true; this.mini.setPointerCapture(ev.pointerId); move(ev); });
+      this.mini.addEventListener('pointermove', (ev) => { if (down) move(ev); });
+      this.mini.addEventListener('pointerup', () => { down = false; });
+      this.mini.addEventListener('wheel', (ev) => ev.stopPropagation(), { passive: true });
+    }
+
+    zoomAt(factor, cx, cy) {
+      const k = Math.min(3, Math.max(0.1, this.view.k * factor));
+      const f = k / this.view.k;
+      this.view.x = cx - (cx - this.view.x) * f;
+      this.view.y = cy - (cy - this.view.y) * f;
+      this.view.k = k;
+      this.applyView();
+    }
+    zoomBy(factor) {
+      const r = this.svg.getBoundingClientRect();
+      this.zoomAt(factor, r.width / 2, r.height / 2);
+    }
+
+    fit() {
+      if (!this.model || !this.visibleTables().length) return;
+      const bb = this.viewport.getBBox();
+      const r = this.svg.getBoundingClientRect();
+      if (!r.width || !r.height) return;
+      const pad = 48;
+      // keep the right edge clear of the minimap when there is room for it
+      const reserve = !this.mini.classList.contains('empty') && r.width > 700 ? 170 : 0;
+      const k = Math.min(1.1, (r.width - pad * 2 - reserve) / bb.width, (r.height - pad * 2) / bb.height);
+      this.view.k = Math.max(0.1, k);
+      this.view.x = (r.width - reserve - bb.width * this.view.k) / 2 - bb.x * this.view.k;
+      this.view.y = (r.height - bb.height * this.view.k) / 2 - bb.y * this.view.k;
+      this.applyView();
+    }
+
+    focusTable(key) {
+      const p = this.positions[key], s = this.sizes[key];
+      if (!p || !s || !this.isVisible(key)) return;
+      const r = this.svg.getBoundingClientRect();
+      this.view.x = r.width / 2 - (p.x + s.w / 2) * this.view.k;
+      this.view.y = r.height / 2 - (p.y + s.h / 2) * this.view.k;
+      this.selected = key;
+      this.applyView();
+      this.refreshHighlight();
+    }
+
+    // -------------------------------------------------------------- export
+    toSVG() {
+      const bb = this.viewport.getBBox();
+      const pad = 32;
+      const vb = [bb.x - pad, bb.y - pad, bb.width + pad * 2, bb.height + pad * 2].map((n) => Math.round(n));
+      const clone = this.svg.cloneNode(true);
+      clone.removeAttribute('class');
+      clone.setAttribute('xmlns', NS);
+      clone.setAttribute('viewBox', vb.join(' '));
+      clone.setAttribute('width', vb[2]);
+      clone.setAttribute('height', vb[3]);
+      clone.querySelector('.viewport').removeAttribute('transform');
+      clone.querySelectorAll('.ref-hit').forEach((n) => n.remove());
+      clone.querySelectorAll('.active,.hl').forEach((n) => n.classList.remove('active', 'hl'));
+      const bg = el('rect', { x: vb[0], y: vb[1], width: vb[2], height: vb[3], fill: '#FFFFFF' });
+      clone.insertBefore(bg, clone.querySelector('.viewport'));
+      return { svg: new XMLSerializer().serializeToString(clone), width: vb[2], height: vb[3] };
+    }
+
+    toPNG(scale = 2) {
+      const { svg, width, height } = this.toSVG();
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+          const c = document.createElement('canvas');
+          c.width = width * scale;
+          c.height = height * scale;
+          const g = c.getContext('2d');
+          g.scale(scale, scale);
+          g.drawImage(img, 0, 0);
+          c.toBlob((b) => (b ? resolve(b) : reject(new Error('PNG export failed'))), 'image/png');
+        };
+        img.onerror = () => reject(new Error('PNG export failed'));
+        img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+      });
+    }
+  }
+
+  root.DBMLDiagram = { Diagram, measureTables };
+})(typeof self !== 'undefined' ? self : this);
+</script>
+  <script>
+/*
+ * Lightweight code editor: a transparent <textarea> over a syntax-highlighted <pre>,
+ * with a line-number gutter, auto-indent and error-line marking.
+ */
+(function (root) {
+  'use strict';
+
+  const TOKEN_RE = new RegExp([
+    /(\/\*[\s\S]*?(?:\*\/|$))/.source,                                  // 1 block comment
+    /(\/\/[^\n]*)/.source,                                              // 2 line comment
+    /('''[\s\S]*?(?:'''|$))/.source,                                    // 3 multi-line string
+    /('(?:\\.|[^'\\\n])*'?)/.source,                                    // 4 string
+    /("(?:\\.|[^"\\\n])*"?)/.source,                                    // 5 quoted identifier
+    /(`[^`\n]*`?)/.source,                                              // 6 expression
+    /\b(Table|TablePartial|Ref|Enum|TableGroup|Project|Note|Records|indexes|as)\b/.source, // 7 keyword
+    /\b(pk|primary key|not null|null|unique|increment|default|ref|headercolor|color|note|name|type|delete|update|cascade|restrict|set null|set default|no action)\b(?=[^\[\]\n]*\])/.source, // 8 setting
+    /(#[0-9a-fA-F]{3,8}\b)/.source,                                     // 9 color
+    /(\b\d+(?:\.\d+)?\b)/.source,                                       // 10 number
+    /(<>|[<>](?!\w)|(?<=\s)-(?=\s))/.source,                             // 11 operator
+    /([\[\]{}])/.source,                                                // 12 bracket
+  ].join('|'), 'gi');
+  const CLASSES = [null, 'c', 'c', 's', 's', 'q', 'x', 'k', 'st', 'col', 'n', 'op', 'b'];
+
+  function escapeHTML(s) { return s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
+
+  function highlight(src) {
+    let out = '', last = 0, m;
+    TOKEN_RE.lastIndex = 0;
+    while ((m = TOKEN_RE.exec(src))) {
+      if (m[0] === '') { TOKEN_RE.lastIndex++; continue; }
+      out += escapeHTML(src.slice(last, m.index));
+      let cls = 'x';
+      for (let i = 1; i < m.length; i++) if (m[i] !== undefined) { cls = CLASSES[i]; break; }
+      out += `<span class="t-${cls}">${escapeHTML(m[0])}</span>`;
+      last = m.index + m[0].length;
+    }
+    return out + escapeHTML(src.slice(last)) + '\n';
+  }
+
+  class Editor {
+    constructor(host, opts) {
+      this.opts = opts || {};
+      host.classList.add('editor');
+      host.innerHTML = '<div class="gutter" aria-hidden="true"></div><div class="code"><pre class="hl" aria-hidden="true"></pre><textarea spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off" aria-label="DBML source"></textarea></div>';
+      this.gutter = host.querySelector('.gutter');
+      this.pre = host.querySelector('.hl');
+      this.ta = host.querySelector('textarea');
+      this.errorLine = null;
+      this.lineCount = 0;
+
+      this.ta.addEventListener('input', () => this.changed());
+      this.ta.addEventListener('scroll', () => this.syncScroll());
+      this.ta.addEventListener('keydown', (e) => this.keydown(e));
+    }
+
+    get value() { return this.ta.value; }
+    set value(v) { this.ta.value = v; this.render(); }
+
+    changed() { this.render(); if (this.opts.onChange) this.opts.onChange(this.ta.value); }
+
+    render() {
+      this.pre.innerHTML = highlight(this.ta.value);
+      const n = this.ta.value.split('\n').length;
+      if (n !== this.lineCount) {
+        this.lineCount = n;
+        let h = '';
+        for (let i = 1; i <= n; i++) h += `<div>${i}</div>`;
+        this.gutter.innerHTML = h;
+      }
+      this.markError(this.errorLine);
+      this.syncScroll();
+    }
+
+    syncScroll() {
+      this.pre.scrollTop = this.ta.scrollTop;
+      this.pre.scrollLeft = this.ta.scrollLeft;
+      this.gutter.scrollTop = this.ta.scrollTop;
+    }
+
+    markError(line) {
+      this.errorLine = line;
+      this.gutter.querySelectorAll('.err').forEach((d) => d.classList.remove('err'));
+      if (line && this.gutter.children[line - 1]) this.gutter.children[line - 1].classList.add('err');
+    }
+
+    insert(text) {
+      this.ta.focus();
+      if (!document.execCommand('insertText', false, text)) {
+        this.ta.setRangeText(text, this.ta.selectionStart, this.ta.selectionEnd, 'end');
+        this.changed();
+      }
+    }
+
+    keydown(e) {
+      const ta = this.ta;
+      if (e.key === 'Tab' && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        if (e.shiftKey) {
+          const start = ta.value.lastIndexOf('\n', ta.selectionStart - 1) + 1;
+          if (ta.value.startsWith('  ', start)) {
+            const [s, en] = [ta.selectionStart, ta.selectionEnd];
+            ta.setSelectionRange(start, start + 2);
+            this.insert('');
+            ta.setSelectionRange(Math.max(start, s - 2), Math.max(start, en - 2));
+          }
+        } else this.insert('  ');
+      } else if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        const pos = ta.selectionStart;
+        const lineStart = ta.value.lastIndexOf('\n', pos - 1) + 1;
+        const indent = ta.value.slice(lineStart).match(/^[ \t]*/)[0];
+        const before = ta.value.slice(lineStart, pos).trimEnd();
+        const after = ta.value.slice(pos, ta.selectionEnd === pos ? pos + 1 : pos);
+        if (before.endsWith('{') && after === '}') {
+          this.insert(`\n${indent}  \n${indent}`);
+          ta.setSelectionRange(pos + indent.length + 3, pos + indent.length + 3);
+        } else this.insert('\n' + indent + (before.endsWith('{') ? '  ' : ''));
+      } else if (e.key === '}' && !e.metaKey && !e.ctrlKey) {
+        const pos = ta.selectionStart;
+        const lineStart = ta.value.lastIndexOf('\n', pos - 1) + 1;
+        const line = ta.value.slice(lineStart, pos);
+        if (/^[ \t]+$/.test(line) && line.length >= 2 && ta.selectionEnd === pos) {
+          e.preventDefault();
+          ta.setSelectionRange(pos - 2, pos);
+          this.insert('}');
+        }
+      }
+    }
+
+    goTo(line, col) {
+      const lines = this.ta.value.split('\n');
+      let pos = 0;
+      for (let i = 0; i < line - 1 && i < lines.length; i++) pos += lines[i].length + 1;
+      const end = pos + (lines[line - 1] || '').length;
+      this.ta.focus();
+      this.ta.setSelectionRange(col ? pos + col - 1 : pos, end);
+      const lh = parseFloat(getComputedStyle(this.ta).lineHeight) || 20;
+      this.ta.scrollTop = Math.max(0, (line - 1) * lh - this.ta.clientHeight / 3);
+      this.syncScroll();
+    }
+  }
+
+  root.DBMLEditor = { Editor, highlight };
+})(typeof self !== 'undefined' ? self : this);
+</script>
+  <script>
+(function (root) {
+  const SAMPLE = `// Welcome to ERDLoom! Edit the DBML on the left — the diagram updates as you type.
+// Drag tables to arrange them, scroll to pan, pinch or Ctrl/⌘ + scroll to zoom.
+// This example schema is fictional.
+
+Project lending_library {
+  database_type: 'PostgreSQL'
+  Note: 'Fictional schema for a neighbourhood lending library'
+}
+
+Table patrons as P {
+  id integer [pk, increment]
+  display_name varchar [not null]
+  email varchar [unique]
+  home_branch_id int [ref: > branches.id]
+  joined_on date [default: \`current_date\`]
+  Note: 'People who hold a library card'
+}
+
+Table branches [headercolor: #0E7C86] {
+  id integer [pk]
+  branch_name varchar [not null]
+  city varchar
+  opens_at time
+}
+
+Table titles [headercolor: #B5562B] {
+  id integer [pk]
+  title varchar [not null]
+  author varchar
+  isbn varchar(13) [unique]
+  format item_format
+  published_year smallint
+}
+
+Table copies {
+  id integer [pk]
+  title_id integer [not null]
+  branch_id integer [not null]
+  barcode varchar [unique, note: 'Printed on the spine label']
+  acquired_on date
+
+  indexes {
+    (title_id, branch_id) [name: 'copies_by_branch']
+  }
+}
+
+Table loans {
+  id integer [pk, increment]
+  copy_id integer [not null]
+  patron_id integer [not null]
+  status loan_state [default: 'active']
+  due_on date
+}
+
+Table holds {
+  patron_id integer
+  title_id integer
+  placed_at timestamp [default: \`now()\`]
+
+  indexes {
+    (patron_id, title_id) [pk]
+  }
+}
+
+Enum loan_state {
+  active
+  returned
+  overdue [note: 'Past the due date and not yet returned']
+  lost
+}
+
+Enum item_format {
+  hardcover
+  paperback
+  audiobook
+  ebook [note: 'Lent through a partner app']
+}
+
+Ref: copies.title_id > titles.id [delete: cascade]
+Ref: copies.branch_id > branches.id
+Ref: loans.copy_id > copies.id
+
+Ref {
+  loans.patron_id > P.id
+  holds.patron_id > patrons.id
+  holds.title_id > titles.id
+}
+
+TableGroup catalog [color: #B5562B] {
+  titles
+  copies
+}
+`;
+  if (typeof module === 'object' && module.exports) module.exports = SAMPLE;
+  else root.DBML_SAMPLE = SAMPLE;
+})(typeof self !== 'undefined' ? self : this);
+</script>
+  <script>
+/*
+ * Information-schema importer: turns rows of
+ *   database_name, schema_name, table_name, column_name, data_type, is_primary_key
+ * (CSV, TSV or other delimited text) into DBML. No other information is used, so
+ * no relationships are created.
+ * Works in the browser (window.DBMLImport) and in Node (module.exports).
+ */
+(function (root, factory) {
+  const api = factory();
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  else root.DBMLImport = api;
+})(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+
+  const FIELDS = ['database_name', 'schema_name', 'table_name', 'column_name', 'data_type', 'is_primary_key'];
+  const TRUE_RE = /^(true|t|yes|y|1|pri|primary|primary key|pk|x)$/i;
+  const FALSE_RE = /^(false|f|no|n|0|-|null)?$/i;
+
+  // ------------------------------------------------------------- delimited text
+  function detectDelimiter(text) {
+    const line = text.split(/\r?\n/).find((l) => l.trim()) || '';
+    let best = ',', bestCount = 0;
+    for (const d of [',', '\t', ';', '|']) {
+      let count = 0, inQ = false;
+      for (const ch of line) {
+        if (ch === '"') inQ = !inQ;
+        else if (ch === d && !inQ) count++;
+      }
+      if (count > bestCount) { best = d; bestCount = count; }
+    }
+    return best;
+  }
+
+  // RFC 4180-style parsing: quoted fields, "" escapes, newlines inside quotes.
+  function parseDelimited(text, delim) {
+    const rows = [];
+    let row = [], field = '', inQ = false, line = 1, rowLine = 1;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (inQ) {
+        if (ch === '"') {
+          if (text[i + 1] === '"') { field += '"'; i++; } else inQ = false;
+        } else {
+          if (ch === '\n') line++;
+          field += ch;
+        }
+        continue;
+      }
+      if (ch === '"' && field.trim() === '') { field = ''; inQ = true; }
+      else if (ch === delim) { row.push(field); field = ''; }
+      else if (ch === '\n' || ch === '\r') {
+        if (ch === '\r' && text[i + 1] === '\n') i++;
+        row.push(field);
+        rows.push({ cells: row, line: rowLine });
+        row = []; field = ''; line++; rowLine = line;
+      } else field += ch;
+    }
+    if (field !== '' || row.length) { row.push(field); rows.push({ cells: row, line: rowLine }); }
+    return rows.filter((r) => r.cells.some((c) => c.trim() !== ''));
+  }
+
+  const normHeader = (s) => s.trim().replace(/^"|"$/g, '').toLowerCase().replace(/[\s-]+/g, '_');
+
+  function readRows(text) {
+    const errors = [], warnings = [];
+    text = String(text || '').replace(/^﻿/, '');
+    if (!text.trim()) return { rows: [], errors, warnings };
+    const delim = detectDelimiter(text);
+    const raw = parseDelimited(text, delim);
+    if (!raw.length) return { rows: [], errors, warnings };
+
+    let index = null, body = raw;
+    const header = raw[0].cells.map(normHeader);
+    if (FIELDS.some((f) => header.includes(f))) {
+      const missing = FIELDS.filter((f) => !header.includes(f));
+      if (missing.length) {
+        errors.push(`The header row is missing ${missing.join(', ')}.`);
+        return { rows: [], errors, warnings };
+      }
+      index = Object.fromEntries(FIELDS.map((f) => [f, header.indexOf(f)]));
+      body = raw.slice(1);
+    } else {
+      index = Object.fromEntries(FIELDS.map((f, i) => [f, i]));
+      warnings.push('No header row found, so the columns are read in the order database_name, schema_name, table_name, column_name, data_type, is_primary_key.');
+    }
+
+    const rows = [];
+    for (const r of body) {
+      const get = (f) => (r.cells[index[f]] ?? '').trim();
+      const row = Object.fromEntries(FIELDS.map((f) => [f, get(f)]));
+      if (r.cells.length < 4) { warnings.push(`Line ${r.line}: skipped — expected 6 values, found ${r.cells.length}.`); continue; }
+      if (!row.table_name || !row.column_name) { warnings.push(`Line ${r.line}: skipped — table_name and column_name are required.`); continue; }
+      const pk = row.is_primary_key;
+      if (TRUE_RE.test(pk)) row.is_primary_key = true;
+      else if (FALSE_RE.test(pk)) row.is_primary_key = false;
+      else { warnings.push(`Line ${r.line}: is_primary_key “${pk}” not recognised, treated as false.`); row.is_primary_key = false; }
+      if (!row.data_type) { warnings.push(`Line ${r.line}: ${row.table_name}.${row.column_name} has no data_type, so it is set to “unknown”.`); row.data_type = 'unknown'; }
+      row.line = r.line;
+      rows.push(row);
+    }
+    if (!rows.length && !errors.length) errors.push('No usable rows were found.');
+    return { rows, errors, warnings, delimiter: delim };
+  }
+
+  // ------------------------------------------------------------------ DBML out
+  const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
+  const quote = (s) => `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+  const ident = (s) => (IDENT.test(s) ? s : quote(s));
+  const SIMPLE_TYPE = /^[A-Za-z_][A-Za-z0-9_]*(\s*\(\s*[A-Za-z0-9_]+(\s*,\s*[A-Za-z0-9_]+)*\s*\))?(\[\])*$/;
+  const typeText = (t) => (SIMPLE_TYPE.test(t) ? t.replace(/\s+/g, '') : quote(t));
+
+  function toDbml(rows, opts = {}) {
+    const warnings = [];
+    const groupBySchema = opts.groupBySchema !== false;
+    const databases = [...new Set(rows.map((r) => r.database_name))];
+    const multiDb = databases.length > 1;
+
+    // table key -> { qualifier, name, columns }
+    const tables = new Map();
+    for (const r of rows) {
+      const schema = multiDb ? [r.database_name, r.schema_name].filter(Boolean).join('.') : r.schema_name;
+      const key = `${schema}\u0000${r.table_name}`;
+      if (!tables.has(key)) tables.set(key, { schema, db: r.database_name, name: r.table_name, columns: [], seen: new Set() });
+      const t = tables.get(key);
+      if (t.seen.has(r.column_name)) {
+        warnings.push(`Line ${r.line}: duplicate column ${r.table_name}.${r.column_name} skipped.`);
+        continue;
+      }
+      t.seen.add(r.column_name);
+      t.columns.push({ name: r.column_name, type: r.data_type, pk: r.is_primary_key });
+    }
+    if (multiDb) warnings.push(`Rows come from ${databases.length} databases, so each table is qualified as “database.schema”.`);
+
+    const tableRef = (t) => (t.schema ? `${ident(t.schema)}.${ident(t.name)}` : ident(t.name));
+    const out = [];
+    const today = opts.date || new Date().toISOString().slice(0, 10);
+    out.push(`// Imported from information schema on ${today}.`);
+    out.push('// Relationships are not part of this input, so none are defined.');
+    out.push('');
+    if (!multiDb && databases[0]) {
+      out.push(`Project ${ident(databases[0])} {`);
+      out.push("  Note: 'Imported from information schema'");
+      out.push('}');
+      out.push('');
+    }
+
+    let columns = 0;
+    for (const t of tables.values()) {
+      const pks = t.columns.filter((c) => c.pk);
+      out.push(`Table ${tableRef(t)} {`);
+      for (const c of t.columns) {
+        columns++;
+        out.push(`  ${ident(c.name)} ${typeText(c.type)}${pks.length === 1 && c.pk ? ' [pk]' : ''}`);
+      }
+      if (pks.length > 1) {
+        out.push('');
+        out.push('  indexes {');
+        out.push(`    (${pks.map((c) => ident(c.name)).join(', ')}) [pk]`);
+        out.push('  }');
+      }
+      out.push('}');
+      out.push('');
+    }
+
+    const schemas = [...new Set([...tables.values()].map((t) => t.schema).filter(Boolean))];
+    if (groupBySchema && schemas.length > 1) {
+      for (const s of schemas) {
+        out.push(`TableGroup ${ident(s)} {`);
+        for (const t of tables.values()) if (t.schema === s) out.push(`  ${tableRef(t)}`);
+        out.push('}');
+        out.push('');
+      }
+    }
+
+    return {
+      dbml: out.join('\n').replace(/\n+$/, '\n'),
+      stats: { databases: databases.filter(Boolean).length, schemas: schemas.length, tables: tables.size, columns },
+      warnings,
+    };
+  }
+
+  function convert(text, opts) {
+    const read = readRows(text);
+    if (read.errors.length) return { dbml: '', stats: null, errors: read.errors, warnings: read.warnings };
+    const res = toDbml(read.rows, opts);
+    return { dbml: res.dbml, stats: res.stats, errors: [], warnings: read.warnings.concat(res.warnings) };
+  }
+
+  return { convert, readRows, toDbml, parseDelimited, detectDelimiter, FIELDS };
+});
+</script>
+  <script>
+/*
+ * Docs view: a readable reference page for a parsed DBML model.
+ * The same builder renders the in-app Docs tab and the exported HTML page.
+ */
+(function (root) {
+  'use strict';
+
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const COLOR_RE = /^#[0-9a-fA-F]{3,8}$/;
+  const safeColor = (c, d) => (c && COLOR_RE.test(c) ? c : d);
+  const HEADER = '#2F5D8A';
+  const GROUP = '#7F8FA6';
+  const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+
+  function readable(hex) {
+    const h = hex.replace('#', '');
+    const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h.slice(0, 6);
+    const n = parseInt(full, 16);
+    if (Number.isNaN(n)) return '#fff';
+    return 0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255) > 170 ? '#1F2933' : '#FFFFFF';
+  }
+
+  // ------------------------------------------------------------ indexing
+  function index(model) {
+    const tables = new Map(model.tables.map((t) => [t.key, t]));
+    const ids = new Map();
+    const used = new Set();
+    const slug = (prefix, key) => {
+      const base = `${prefix}-${key.replace(/[^A-Za-z0-9_-]+/g, '_')}`;
+      let id = base, i = 2;
+      while (used.has(id)) id = `${base}-${i++}`;
+      used.add(id);
+      return id;
+    };
+    for (const t of model.tables) ids.set(`t:${t.key}`, slug('table', t.key));
+    for (const e of model.enums) ids.set(`e:${e.key}`, slug('enum', e.key));
+    for (const g of model.groups) ids.set(`g:${g.name}`, slug('group', g.name));
+
+    const groupOf = new Map();
+    for (const g of model.groups) for (const k of g.tables) if (!groupOf.has(k)) groupOf.set(k, g);
+
+    const enumUsers = new Map(model.enums.map((e) => [e.key, []]));
+    for (const t of model.tables) for (const c of t.columns) if (c.enum && enumUsers.has(c.enum)) enumUsers.get(c.enum).push({ t, c });
+
+    // out: this table references another; in: another references this; other: many-to-many
+    const rel = new Map(model.tables.map((t) => [t.key, { out: [], in: [], other: [] }]));
+    for (const r of model.refs) {
+      const [a, b] = r.endpoints;
+      const push = (list, self, other, kind) => rel.get(self.table)[list].push({ r, self, other, kind });
+      if (a.relation === '*' && b.relation === '1') {
+        push('out', a, b, 'many-to-one');
+        if (a.table !== b.table) push('in', b, a, 'one-to-many');
+      } else if (a.relation === '1' && b.relation === '*') {
+        push('out', b, a, 'many-to-one');
+        if (a.table !== b.table) push('in', a, b, 'one-to-many');
+      } else if (r.op === '-') {
+        push('out', a, b, 'one-to-one');
+        if (a.table !== b.table) push('in', b, a, 'one-to-one');
+      } else {
+        push('other', a, b, 'many-to-many');
+        if (a.table !== b.table) push('other', b, a, 'many-to-many');
+      }
+    }
+
+    // column -> the columns it points at
+    const fk = new Map();
+    for (const [key, rr] of rel) {
+      for (const x of rr.out) {
+        x.self.columns.forEach((c, i) => {
+          const k = `${key}\u0000${c}`;
+          if (!fk.has(k)) fk.set(k, []);
+          fk.get(k).push({ table: x.other.table, column: x.other.columns[i] });
+        });
+      }
+    }
+    return { tables, ids, groupOf, enumUsers, rel, fk, hasRefs: model.refs.length > 0 };
+  }
+
+  const tLink = (ix, key, label) => `<a href="#${ix.ids.get(`t:${key}`)}" data-table="${esc(key)}">${esc(label || key)}</a>`;
+  const cols = (ep) => (ep.columns.length > 1 ? `(${ep.columns.join(', ')})` : ep.columns[0]);
+
+  // ------------------------------------------------------- mini diagram
+  function miniSVG(model, ix, key) {
+    const r = ix.rel.get(key);
+    if (!r) return '';
+    const side = new Map(); // neighbour -> { pos: 'L'|'R', self, other }
+    const put = (x, pos) => {
+      if (x.other.table === key || side.has(x.other.table)) return;
+      side.set(x.other.table, { pos, selfRel: x.self.relation, otherRel: x.other.relation });
+    };
+    r.in.forEach((x) => put(x, 'L'));
+    r.out.forEach((x) => put(x, 'R'));
+    r.other.forEach((x) => {
+      const nl = [...side.values()].filter((v) => v.pos === 'L').length;
+      const nr = side.size - nl;
+      put(x, nl <= nr ? 'L' : 'R');
+    });
+    if (!side.size) return '';
+    const MAX = 7;
+    const L = [...side].filter(([, v]) => v.pos === 'L');
+    const R = [...side].filter(([, v]) => v.pos === 'R');
+    const BW = 80, BH = 24, GAP = 9, W = 330, PAD = 4;
+    const rows = Math.max(Math.min(L.length, MAX) + (L.length > MAX ? 1 : 0), Math.min(R.length, MAX) + (R.length > MAX ? 1 : 0), 1);
+    const H = PAD * 2 + rows * BH + (rows - 1) * GAP;
+    const cx = (W - BW) / 2, cy = H / 2;
+    const short = (s) => (s.length > 11 ? `${s.slice(0, 10)}…` : s);
+    const t = ix.tables.get(key);
+    const color = safeColor(t.color, HEADER);
+    let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(key)} and its related tables" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="10.5">`;
+    const mark = (x, y, dir, rel) => (rel === '*'
+      ? `M${x + dir * 9},${y} L${x},${y - 5} M${x + dir * 9},${y} L${x},${y} M${x + dir * 9},${y} L${x},${y + 5}`
+      : `M${x + dir * 6},${y - 4} L${x + dir * 6},${y + 4}`);
+
+    const column = (list, x, edgeX, centerEdge, dirOut, dirIn) => {
+      const shown = list.slice(0, MAX);
+      const n = shown.length + (list.length > MAX ? 1 : 0);
+      const top = cy - (n * BH + (n - 1) * GAP) / 2;
+      shown.forEach(([k, v], i) => {
+        const y = top + i * (BH + GAP);
+        const my = y + BH / 2;
+        const nt = ix.tables.get(k);
+        const c = safeColor(nt && nt.color, HEADER);
+        const mid = (edgeX + centerEdge) / 2;
+        svg += `<path d="M${edgeX},${my} C${mid},${my} ${mid},${cy} ${centerEdge},${cy}" fill="none" stroke="#9AA7B8" stroke-width="1.2"/>`;
+        svg += `<path d="${mark(edgeX, my, dirOut, v.otherRel)} ${mark(centerEdge, cy, dirIn, v.selfRel)}" fill="none" stroke="#9AA7B8" stroke-width="1.2"/>`;
+        svg += `<a href="#${ix.ids.get(`t:${k}`)}" data-table="${esc(k)}"><title>${esc(k)}</title>`;
+        svg += `<rect x="${x}" y="${y}" width="${BW}" height="${BH}" rx="5" fill="#FFFFFF" stroke="#D3DCE6"/>`;
+        svg += `<rect x="${x}" y="${y}" width="4" height="${BH}" rx="2" fill="${c}"/>`;
+        svg += `<text x="${x + 10}" y="${my}" dominant-baseline="central" fill="#1F2933">${esc(short(k))}</text></a>`;
+      });
+      if (list.length > MAX) {
+        const y = top + MAX * (BH + GAP) + BH / 2;
+        svg += `<text x="${x + BW / 2}" y="${y}" text-anchor="middle" dominant-baseline="central" fill="#6B7785">+${list.length - MAX} more</text>`;
+      }
+    };
+    column(L, PAD, PAD + BW, cx, 1, -1);
+    column(R, W - PAD - BW, W - PAD - BW, cx + BW, -1, 1);
+    svg += `<rect x="${cx}" y="${cy - BH / 2}" width="${BW}" height="${BH}" rx="5" fill="${color}"/>`;
+    svg += `<text x="${cx + BW / 2}" y="${cy}" text-anchor="middle" dominant-baseline="central" font-weight="600" fill="${readable(color)}">${esc(short(key))}</text>`;
+    return `${svg}</svg>`;
+  }
+
+  // ------------------------------------------------------------ sections
+  function relItem(ix, x, arrow) {
+    const del = x.r.onDelete ? ` · on delete ${esc(x.r.onDelete)}` : '';
+    const upd = x.r.onUpdate ? ` · on update ${esc(x.r.onUpdate)}` : '';
+    return `<li>${tLink(ix, x.other.table)}<span class="d-rel"><code>${esc(cols(x.self))}</code> ${arrow} <code>${esc(cols(x.other))}</code></span><span class="d-card">${x.kind}${del}${upd}</span></li>`;
+  }
+
+  function tableSection(t, ix, opts) {
+    const q = opts.query;
+    const id = ix.ids.get(`t:${t.key}`);
+    const g = ix.groupOf.get(t.key);
+    const color = safeColor(t.color, HEADER);
+    const hasDefault = t.columns.some((c) => c.default != null);
+    const hasNote = t.columns.some((c) => c.note);
+    let h = `<section class="d-table" id="${id}" data-key="${esc(t.key)}">`;
+    h += `<header class="d-head"><span class="d-swatch" style="background:${color}"></span><h2>${esc(t.name)}</h2>`;
+    if (t.schema) h += `<span class="d-chip">${esc(t.schema)}</span>`;
+    if (t.alias) h += `<span class="d-chip">alias ${esc(t.alias)}</span>`;
+    if (g && g.name !== t.schema) h += `<a class="d-chip d-group" href="#${ix.ids.get(`g:${g.name}`)}" data-group="${esc(g.name)}" style="--c:${safeColor(g.color, GROUP)}">${esc(g.name)}</a>`;
+    h += '<span class="d-spacer"></span>';
+    if (!opts.export) {
+      h += `<button class="d-act" data-show="${esc(t.key)}" title="Open this table in the diagram">Show in diagram</button>`;
+      h += `<button class="d-act" data-copy="${esc(t.key)}" title="Copy a link straight to this table">Copy link</button>`;
+    }
+    h += '</header>';
+    if (t.note) h += `<p class="d-note">${esc(t.note)}</p>`;
+
+    const rr = ix.rel.get(t.key);
+    const nRel = rr.out.length + rr.in.length + rr.other.length;
+    h += `<div class="d-body${ix.hasRefs ? '' : ' no-side'}"><div class="d-main">`;
+    h += '<div class="d-scroll"><table class="d-grid"><thead><tr><th>Column</th><th>Type</th><th>Key</th><th>Nullable</th>';
+    if (hasDefault) h += '<th>Default</th>';
+    if (hasNote) h += '<th>Note</th>';
+    h += '</tr></thead><tbody>';
+    for (const c of t.columns) {
+      const keys = [];
+      if (c.pk) keys.push('<span class="b b-pk">PK</span>');
+      for (const tg of ix.fk.get(`${t.key}\u0000${c.name}`) || []) {
+        keys.push(`<span class="b b-fk">FK</span> → ${tLink(ix, tg.table)}.<code>${esc(tg.column)}</code>`);
+      }
+      if (c.unique) keys.push('<span class="b">unique</span>');
+      if (c.increment) keys.push('<span class="b">auto-increment</span>');
+      const type = c.enum
+        ? `<a href="#${ix.ids.get(`e:${c.enum}`)}" data-enum="${esc(c.enum)}"><code>${esc(c.type)}</code></a>`
+        : `<code>${esc(c.type)}</code>`;
+      const hit = q && c.name.toLowerCase().includes(q);
+      h += `<tr${hit ? ' class="hit"' : ''}><td class="d-cname">${esc(c.name)}</td><td>${type}</td><td class="d-keys">${keys.join('<br>')}</td><td>${c.pk || c.notNull ? 'No' : 'Yes'}</td>`;
+      if (hasDefault) h += `<td>${c.default != null ? `<code>${esc(c.default)}</code>` : ''}</td>`;
+      if (hasNote) h += `<td class="d-cnote">${c.note ? esc(c.note) : ''}</td>`;
+      h += '</tr>';
+    }
+    if (!t.columns.length) h += '<tr><td colspan="4" class="d-empty">No columns.</td></tr>';
+    h += '</tbody></table></div>';
+
+    if (t.indexes.length) {
+      const idxNote = t.indexes.some((i) => i.note);
+      h += '<h3>Indexes</h3><div class="d-scroll"><table class="d-grid"><thead><tr><th>Columns</th><th>Kind</th><th>Name</th>';
+      if (idxNote) h += '<th>Note</th>';
+      h += '</tr></thead><tbody>';
+      for (const i of t.indexes) {
+        const kind = [i.pk ? 'primary key' : i.unique ? 'unique' : 'index', i.type].filter(Boolean).join(' · ');
+        h += `<tr><td><code>${esc(i.columns.join(', '))}</code></td><td>${esc(kind)}</td><td>${i.name ? esc(i.name) : ''}</td>${idxNote ? `<td>${i.note ? esc(i.note) : ''}</td>` : ''}</tr>`;
+      }
+      h += '</tbody></table></div>';
+    }
+    h += '</div>';
+
+    if (ix.hasRefs) {
+      h += '<aside class="d-side">';
+      if (nRel) {
+        h += `<div class="d-mini" data-mini="${esc(t.key)}">${opts.export ? miniSVG(opts.model, ix, t.key) : ''}</div>`;
+        if (rr.out.length) h += `<h4>References</h4><ul class="d-rels">${rr.out.map((x) => relItem(ix, x, '→')).join('')}</ul>`;
+        if (rr.in.length) h += `<h4>Referenced by</h4><ul class="d-rels">${rr.in.map((x) => relItem(ix, x, '←')).join('')}</ul>`;
+        if (rr.other.length) h += `<h4>Many-to-many</h4><ul class="d-rels">${rr.other.map((x) => relItem(ix, x, '↔')).join('')}</ul>`;
+      } else {
+        h += '<p class="d-muted">No relationships.</p>';
+      }
+      h += '</aside>';
+    }
+    h += '</div></section>';
+    return h;
+  }
+
+  function enumSection(e, ix) {
+    const users = ix.enumUsers.get(e.key) || [];
+    const hasNote = e.values.some((v) => v.note);
+    let h = `<section class="d-enum" id="${ix.ids.get(`e:${e.key}`)}"><header class="d-head"><span class="d-swatch enum">E</span><h2>${esc(e.key)}</h2><span class="d-chip">enum</span></header>`;
+    h += `<div class="d-scroll"><table class="d-grid d-narrow"><thead><tr><th>Value</th>${hasNote ? '<th>Note</th>' : ''}</tr></thead><tbody>`;
+    for (const v of e.values) h += `<tr><td><code>${esc(v.name)}</code></td>${hasNote ? `<td>${v.note ? esc(v.note) : ''}</td>` : ''}</tr>`;
+    h += '</tbody></table></div>';
+    if (users.length) {
+      h += `<p class="d-used">Used by ${users.map(({ t, c }) => `${tLink(ix, t.key)}.<code>${esc(c.name)}</code>`).join(', ')}</p>`;
+    }
+    return `${h}</section>`;
+  }
+
+  function overview(model, ix) {
+    const p = model.project;
+    const ncols = model.tables.reduce((a, t) => a + t.columns.length, 0);
+    let h = '<section class="d-overview" id="overview">';
+    h += `<h1>${esc(p && p.name ? p.name : 'Schema')}</h1>`;
+    if (p && p.settings && p.settings.database_type) h += `<p class="d-muted">Database: ${esc(p.settings.database_type)}</p>`;
+    if (p && p.note) h += `<p class="d-note">${esc(p.note)}</p>`;
+    const stats = [plural(model.tables.length, 'table'), plural(ncols, 'column'), plural(model.refs.length, 'relationship')];
+    if (model.enums.length) stats.push(plural(model.enums.length, 'enum'));
+    if (model.groups.length) stats.push(plural(model.groups.length, 'group'));
+    h += `<div class="d-stats">${stats.map((s) => `<span>${s}</span>`).join('')}</div>`;
+
+    if (model.groups.length) {
+      h += '<h3>Groups</h3><div class="d-groups">';
+      for (const g of model.groups) {
+        h += `<div class="d-gcard" id="${ix.ids.get(`g:${g.name}`)}" style="--c:${safeColor(g.color, GROUP)}"><div class="d-gname">${esc(g.name)} <span class="d-muted">${plural(g.tables.length, 'table')}</span></div>`;
+        if (g.note) h += `<p class="d-note">${esc(g.note)}</p>`;
+        h += `<div class="d-glinks">${g.tables.map((k) => tLink(ix, k)).join('')}</div></div>`;
+      }
+      h += '</div>';
+    }
+
+    const anyNote = model.tables.some((t) => t.note);
+    h += `<h3>Tables</h3><div class="d-scroll"><table class="d-grid d-index"><thead><tr><th>Table</th><th>Columns</th>${model.groups.length ? '<th>Group</th>' : ''}${anyNote ? '<th>Note</th>' : ''}</tr></thead><tbody>`;
+    for (const t of model.tables) {
+      const g = ix.groupOf.get(t.key);
+      const note = t.note ? t.note.split('\n')[0] : '';
+      h += `<tr><td>${tLink(ix, t.key)}</td><td>${t.columns.length}</td>${model.groups.length ? `<td>${g ? esc(g.name) : ''}</td>` : ''}${anyNote ? `<td class="d-cnote">${esc(note)}</td>` : ''}</tr>`;
+    }
+    h += '</tbody></table></div>';
+
+    if (model.notes && model.notes.length) {
+      h += '<h3>Notes</h3>';
+      for (const n of model.notes) h += `<div class="d-sticky">${n.name ? `<b>${esc(n.name)}</b>` : ''}<p class="d-note">${esc(n.text)}</p></div>`;
+    }
+    return `${h}</section>`;
+  }
+
+  function build(model, ix, opts = {}) {
+    const q = (opts.query || '').trim().toLowerCase();
+    const o = { ...opts, query: q, model };
+    let tables = model.tables;
+    let enums = model.enums;
+    let h = '';
+    if (q) {
+      tables = tables.filter((t) => t.key.toLowerCase().includes(q) || (t.alias || '').toLowerCase().includes(q) || t.columns.some((c) => c.name.toLowerCase().includes(q)));
+      enums = enums.filter((e) => e.key.toLowerCase().includes(q) || e.values.some((v) => v.name.toLowerCase().includes(q)));
+      h += `<div class="d-filter">${plural(tables.length, 'table')}${enums.length ? ` and ${plural(enums.length, 'enum')}` : ''} match “${esc(opts.query.trim())}”. <button class="d-act" data-clear-filter>Clear filter</button></div>`;
+    } else {
+      h += overview(model, ix);
+    }
+    if (!model.tables.length) h += '<p class="d-muted">There are no tables yet. Add a <code>Table</code> to your DBML.</p>';
+    for (const t of tables) h += tableSection(t, ix, o);
+    if (enums.length) {
+      h += '<h2 class="d-part">Enums</h2>';
+      for (const e of enums) h += enumSection(e, ix);
+    }
+    return h;
+  }
+
+  // --------------------------------------------------------------- styles
+  const CSS = `
+.erd-docs { --ink: #1F2933; --muted: #6B7785; --line: #E1E6EC; --soft: #F5F7FA; --accent: #2F80ED;
+  color: var(--ink); font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+  max-width: 1120px; margin: 0 auto; padding: 28px 32px 80px; }
+.erd-docs a { color: var(--accent); text-decoration: none; }
+.erd-docs a:hover { text-decoration: underline; }
+.erd-docs code { font: 12.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.erd-docs h1 { font-size: 30px; line-height: 1.15; margin: 0 0 8px; letter-spacing: -.01em; }
+.erd-docs h2 { font-size: 20px; margin: 0; }
+.erd-docs h3 { font-size: 14px; margin: 22px 0 8px; }
+.erd-docs h4 { font-size: 12.5px; margin: 14px 0 6px; color: var(--muted); font-weight: 600; }
+.erd-docs .d-muted { color: var(--muted); margin: 0; }
+.erd-docs .d-note { white-space: pre-wrap; margin: 8px 0 0; max-width: 72ch; }
+.erd-docs .d-stats { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 6px; }
+.erd-docs .d-stats span { background: var(--soft); border: 1px solid var(--line); border-radius: 999px; padding: 3px 12px; font-size: 13px; }
+.erd-docs .d-groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.erd-docs .d-gcard { border: 1px solid var(--line); border-left: 4px solid var(--c); border-radius: 0; padding: 10px 12px; scroll-margin-top: 16px; }
+.erd-docs .d-gname { font-weight: 600; }
+.erd-docs .d-glinks { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 6px; }
+.erd-docs .d-sticky { background: #FFF9E6; border: 1px solid #F3E3B5; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+.erd-docs .d-overview { padding-bottom: 18px; border-bottom: 1px solid var(--line); }
+.erd-docs .d-part { margin: 40px 0 0; font-size: 13px; color: var(--muted); text-transform: none; }
+.erd-docs .d-filter { display: flex; align-items: center; gap: 12px; color: var(--muted); padding: 4px 0 10px; border-bottom: 1px solid var(--line); }
+.erd-docs section.d-table, .erd-docs section.d-enum { padding: 26px 0; border-bottom: 1px solid var(--line); scroll-margin-top: 8px; }
+.erd-docs section.flash { animation: d-flash 1.2s ease-out; }
+@keyframes d-flash { from { background: #EAF2FE; } to { background: transparent; } }
+.erd-docs .d-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.erd-docs .d-swatch { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+.erd-docs .d-swatch.enum { width: auto; height: auto; color: #8E44AD; font-weight: 700; font-size: 13px; }
+.erd-docs .d-chip { font-size: 12px; background: var(--soft); border: 1px solid var(--line); border-radius: 999px; padding: 1px 9px; color: var(--muted); }
+.erd-docs .d-chip.d-group { color: var(--ink); border-color: var(--c); background: color-mix(in srgb, var(--c) 10%, #fff); }
+.erd-docs .d-spacer { flex: 1; }
+.erd-docs .d-act { font: inherit; font-size: 12.5px; background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 7px; padding: 4px 10px; cursor: pointer; }
+.erd-docs .d-act:hover { border-color: #C5CFDA; background: #F8FAFC; }
+.erd-docs .d-body { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 28px; margin-top: 14px; }
+.erd-docs .d-body.no-side { grid-template-columns: minmax(0, 1fr); }
+.erd-docs .d-scroll { overflow-x: auto; }
+.erd-docs table.d-grid { width: 100%; border-collapse: collapse; font-size: 13px; }
+.erd-docs table.d-narrow { width: auto; min-width: 260px; }
+.erd-docs .d-grid th { text-align: left; font-weight: 600; color: var(--muted); font-size: 12px; padding: 6px 12px 6px 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.erd-docs .d-grid td { padding: 7px 12px 7px 0; border-bottom: 1px solid #EEF1F4; vertical-align: top; }
+.erd-docs .d-grid tr.hit td { background: #FFF6D6; }
+.erd-docs .d-cname { font-weight: 600; white-space: nowrap; }
+.erd-docs .d-keys { white-space: nowrap; }
+.erd-docs .d-cnote { color: var(--muted); min-width: 160px; }
+.erd-docs .d-empty { color: var(--muted); font-style: italic; }
+.erd-docs .b { display: inline-block; font-size: 11px; font-weight: 600; border-radius: 4px; padding: 0 5px; background: var(--soft); border: 1px solid var(--line); color: var(--muted); }
+.erd-docs .b-pk { background: #FDF3D6; border-color: #EBD48E; color: #8A6A0B; }
+.erd-docs .b-fk { background: #E7F0FD; border-color: #B9D3FA; color: #1B5FC1; }
+.erd-docs .d-side { min-width: 0; }
+.erd-docs .d-mini { min-height: 40px; background: var(--soft); border: 1px solid var(--line); border-radius: 8px; padding: 6px; }
+.erd-docs .d-mini svg { display: block; }
+.erd-docs .d-mini a text { text-decoration: none; }
+.erd-docs .d-rels { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+.erd-docs .d-rels li { padding: 5px 0; border-bottom: 1px solid #EEF1F4; display: flex; flex-wrap: wrap; gap: 2px 8px; }
+.erd-docs .d-rel { color: var(--muted); }
+.erd-docs .d-card { color: var(--muted); font-size: 12px; width: 100%; }
+.erd-docs .d-used { margin: 10px 0 0; color: var(--muted); }
+@media (max-width: 860px) {
+  .erd-docs { padding: 20px 16px 60px; }
+  .erd-docs .d-body { grid-template-columns: minmax(0, 1fr); }
+}
+@media print {
+  .erd-docs .d-act { display: none; }
+  .erd-docs section.d-table, .erd-docs section.d-enum { break-inside: avoid; }
+}`;
+
+  const EXPORT_CSS = `
+* { box-sizing: border-box; }
+body { margin: 0; background: #fff; }
+.x-wrap { display: grid; grid-template-columns: 240px minmax(0, 1fr); min-height: 100vh; }
+.x-toc { position: sticky; top: 0; align-self: start; height: 100vh; overflow-y: auto; padding: 24px 16px; border-right: 1px solid #E1E6EC;
+  background: #FAFBFC; font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+.x-toc b { display: block; margin: 14px 0 4px; font-size: 11.5px; color: #6B7785; }
+.x-toc a { display: block; color: #1F2933; text-decoration: none; padding: 2px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.x-toc a:hover { color: #2F80ED; }
+.x-foot { color: #6B7785; font-size: 12px; margin-top: 32px; }
+@media (max-width: 760px) { .x-wrap { grid-template-columns: minmax(0, 1fr); } .x-toc { position: static; max-height: none; border-right: 0; border-bottom: 1px solid #E1E6EC; } }
+@media print { .x-wrap { display: block; } .x-toc { display: none; } }`;
+
+  // ------------------------------------------------------------- public
+  let current = null;
+  let observer = null;
+
+  function render(container, model, opts = {}) {
+    const ix = index(model);
+    current = { model, ix };
+    if (!document.getElementById('erd-docs-css')) {
+      const st = document.createElement('style');
+      st.id = 'erd-docs-css';
+      st.textContent = CSS;
+      document.head.appendChild(st);
+    }
+    container.innerHTML = build(model, ix, opts);
+    if (observer) observer.disconnect();
+    const minis = container.querySelectorAll('[data-mini]');
+    const fill = (el) => { el.innerHTML = miniSVG(model, ix, el.getAttribute('data-mini')); };
+    if ('IntersectionObserver' in window) {
+      observer = new IntersectionObserver((entries) => {
+        for (const en of entries) {
+          if (!en.isIntersecting) continue;
+          fill(en.target);
+          observer.unobserve(en.target);
+        }
+      }, { root: opts.scrollRoot || null, rootMargin: '400px 0px' });
+      minis.forEach((m) => observer.observe(m));
+    } else minis.forEach(fill);
+  }
+
+  function sectionFor(kind, key) {
+    if (!current) return null;
+    const id = current.ix.ids.get(`${kind}:${key}`);
+    return id ? document.getElementById(id) : null;
+  }
+
+  function exportHTML(model, opts = {}) {
+    const ix = index(model);
+    const title = (model.project && model.project.name) || opts.title || 'Schema';
+    const date = opts.date || new Date().toISOString().slice(0, 10);
+    let toc = '<a href="#overview"><strong>Overview</strong></a>';
+    if (model.groups.length) toc += `<b>Groups</b>${model.groups.map((g) => `<a href="#${ix.ids.get(`g:${g.name}`)}">${esc(g.name)}</a>`).join('')}`;
+    toc += `<b>Tables</b>${model.tables.map((t) => `<a href="#${ix.ids.get(`t:${t.key}`)}">${esc(t.key)}</a>`).join('')}`;
+    if (model.enums.length) toc += `<b>Enums</b>${model.enums.map((e) => `<a href="#${ix.ids.get(`e:${e.key}`)}">${esc(e.key)}</a>`).join('')}`;
+    const body = build(model, ix, { export: true });
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(title)} — schema documentation</title>
+<style>${CSS}
+${EXPORT_CSS}</style>
+</head>
+<body>
+<div class="x-wrap">
+<nav class="x-toc" aria-label="Contents">${toc}</nav>
+<main class="erd-docs">${body}
+<p class="x-foot">Generated on ${esc(date)} with ERDLoom.</p>
+</main>
+</div>
+</body>
+</html>
+`;
+  }
+
+  root.DBMLDocs = { render, exportHTML, sectionFor, miniSVG: (m, key) => miniSVG(m, index(m), key) };
+})(typeof self !== 'undefined' ? self : this);
+</script>
+  <script>
+(function () {
+  'use strict';
+
+  const KEY = (k) => `erdloom:${k}`;
+  const store = {
+    get(k) { try { return localStorage.getItem(KEY(k)); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem(KEY(k), v); } catch (e) { /* storage unavailable */ } },
+    json(k, fallback) { try { return JSON.parse(this.get(k)) ?? fallback; } catch (e) { return fallback; } },
+  };
+
+  const $ = (s) => document.querySelector(s);
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+  const MOD = isMac ? '⌘' : 'Ctrl+';
+  $('#kbd-k').textContent = `${MOD}K`;
+
+  const status = $('#status');
+  const errorBar = $('#error');
+  const zoomLabel = $('#zoom-level');
+  const split = $('#split');
+  const filterInput = $('#filter');
+  const outlineEl = $('#outline');
+  const viewbar = $('#viewbar');
+
+  // ------------------------------------------------------------------ state
+  let positions = store.json('positions', {});
+  let savedViews = store.json('views', []);         // [{ name, tables: [keys] }]
+  let mode = store.json('mode', { type: 'all' });   // all | group | saved | focus
+  let keysOnly = store.get('keysOnly') === '1';
+  let fileName = store.get('fileName') || null;
+  let model = null;
+  let firstRender = true;
+  let selected = null;
+  let tab = store.get('tab') === 'docs' ? 'docs' : 'diagram';
+  let needsFit = false;   // a fit was requested while the diagram was hidden
+  const docsPane = $('#docs-pane');
+  const docsEl = $('#docs');
+  if (tab === 'docs') split.classList.add('docs');
+
+  const diagram = new DBMLDiagram.Diagram($('#canvas'), {
+    onPositionsChange: (p) => { positions = { ...positions, ...p }; savePositions(); },
+    onZoom: (k) => { zoomLabel.textContent = `${Math.round(k * 100)}%`; },
+    onOpen: (t, col) => goToCode(col ? col.line : t.line),
+    onSelect: (t) => { selected = t ? t.key : null; renderOutline(); renderViewbar(); },
+  });
+  diagram.setKeysOnly(keysOnly);
+
+  const editor = new DBMLEditor.Editor($('#editor'), { onChange: schedule });
+
+  function savePositions() { store.set('positions', JSON.stringify(positions)); }
+
+  // ------------------------------------------------------------- parsing
+  let timer = null;
+  function schedule() { clearTimeout(timer); timer = setTimeout(update, 220); }
+
+  function update() {
+    const src = editor.value;
+    store.set('source', src);
+    let next;
+    try {
+      next = DBML.parse(src);
+    } catch (e) {
+      if (!(e instanceof DBML.DBMLError)) console.error(e);
+      showError(e);
+      return;
+    }
+    clearError();
+    model = next;
+    const sizes = DBMLDiagram.measureTables(model, false);
+    const auto = DBMLLayout.autoLayout(model, sizes);
+    const placed = {};
+    const known = model.tables.filter((t) => positions[t.key]);
+    const fresh = model.tables.filter((t) => !positions[t.key]);
+    for (const t of known) placed[t.key] = { ...positions[t.key] };
+    if (fresh.length) {
+      if (known.length) {
+        // new tables go to the right of what has already been arranged
+        const maxX = Math.max(...known.map((t) => placed[t.key].x + sizes[t.key].w));
+        const minY = Math.min(...known.map((t) => placed[t.key].y));
+        const ax = Math.min(...fresh.map((t) => auto[t.key].x));
+        const ay = Math.min(...fresh.map((t) => auto[t.key].y));
+        for (const t of fresh) placed[t.key] = { x: auto[t.key].x - ax + maxX + 110, y: auto[t.key].y - ay + minY };
+      } else {
+        for (const t of fresh) placed[t.key] = { ...auto[t.key] };
+      }
+    }
+    positions = { ...positions, ...placed };
+    savePositions();
+    if (selected && !model.tables.some((t) => t.key === selected)) selected = null;
+    if (!modeIsValid(mode)) { mode = { type: 'all' }; store.set('mode', JSON.stringify(mode)); }
+    diagram.visible = visibleFor(mode);
+    diagram.setModel(model, placed);
+    renderOutline();
+    renderViewbar();
+    renderDocname();
+    const n = model.tables.length, r = model.refs.length, en = model.enums.length;
+    status.textContent = `${n} table${n === 1 ? '' : 's'} · ${r} ref${r === 1 ? '' : 's'}${en ? ` · ${en} enum${en === 1 ? '' : 's'}` : ''}`;
+    status.classList.remove('bad');
+    renderDocs();
+    if (firstRender) { firstRender = false; requestFit(); }
+  }
+
+  function requestFit() {
+    if (tab === 'docs') needsFit = true;
+    else requestAnimationFrame(() => diagram.fit());
+  }
+
+  function showError(e) {
+    const where = e.line ? `Line ${e.line}${e.col ? `, col ${e.col}` : ''}` : 'Error';
+    errorBar.innerHTML = '';
+    const b = document.createElement('button');
+    b.className = 'err-loc';
+    b.textContent = where;
+    b.onclick = () => editor.goTo(e.line, e.col);
+    errorBar.append(b, document.createTextNode(e.message));
+    errorBar.hidden = false;
+    editor.markError(e.line);
+    status.textContent = 'Syntax error — showing last valid diagram';
+    status.classList.add('bad');
+  }
+  function clearError() { errorBar.hidden = true; editor.markError(null); }
+
+  function renderDocname() {
+    const name = fileName || (model && model.project && model.project.name ? `${model.project.name}.dbml` : 'untitled.dbml');
+    $('#docname').textContent = name;
+  }
+
+  // ------------------------------------------------------ views and focus
+  function neighborsOf(key) {
+    const out = new Set();
+    for (const r of model.refs) {
+      const [a, b] = r.endpoints;
+      if (a.table === key) out.add(b.table);
+      if (b.table === key) out.add(a.table);
+    }
+    return out;
+  }
+
+  function focusSet(key, hops) {
+    const seen = new Set([key]);
+    let frontier = [key];
+    for (let h = 0; h < hops; h++) {
+      const next = [];
+      for (const k of frontier) for (const n of neighborsOf(k)) if (!seen.has(n)) { seen.add(n); next.push(n); }
+      frontier = next;
+    }
+    return seen;
+  }
+
+  function visibleFor(m) {
+    if (!model) return null;
+    const exists = (k) => model.tables.some((t) => t.key === k);
+    if (m.type === 'group') {
+      const g = model.groups.find((x) => x.name === m.name);
+      return g ? new Set(g.tables) : null;
+    }
+    if (m.type === 'saved') {
+      const v = savedViews.find((x) => x.name === m.name);
+      return v ? new Set(v.tables.filter(exists)) : null;
+    }
+    if (m.type === 'focus') return exists(m.key) ? focusSet(m.key, m.hops || 1) : null;
+    return null;
+  }
+
+  function modeIsValid(m) {
+    return m.type === 'all' || visibleFor(m) !== null;
+  }
+
+  function setMode(m, opts = {}) {
+    mode = model && !modeIsValid(m) ? { type: 'all' } : m;
+    store.set('mode', JSON.stringify(mode));
+    diagram.setVisible(visibleFor(mode));
+    if (mode.type === 'focus') { selected = mode.key; diagram.select(mode.key); }
+    renderOutline();
+    renderViewbar();
+    if (opts.fit !== false) requestFit();
+  }
+
+  function focusOn(key, hops) { setMode({ type: 'focus', key, hops: hops || (mode.type === 'focus' ? mode.hops : 1) }); }
+
+  function modeLabel(m) {
+    if (m.type === 'group') return `Group: ${m.name}`;
+    if (m.type === 'saved') return `View: ${m.name}`;
+    if (m.type === 'focus') return `Focus: ${m.key}`;
+    return 'All tables';
+  }
+
+  function saveView(name) {
+    name = name.trim();
+    if (!name || !model) return;
+    const vis = diagram.visible ? [...diagram.visible] : model.tables.map((t) => t.key);
+    savedViews = savedViews.filter((v) => v.name !== name).concat([{ name, tables: vis }]);
+    store.set('views', JSON.stringify(savedViews));
+    setMode({ type: 'saved', name }, { fit: false });
+    toast(`Saved view “${name}”`);
+  }
+
+  function deleteView(name) {
+    savedViews = savedViews.filter((v) => v.name !== name);
+    store.set('views', JSON.stringify(savedViews));
+    if (mode.type === 'saved' && mode.name === name) setMode({ type: 'all' });
+    else renderOutline();
+    toast(`Deleted view “${name}”`);
+  }
+
+  function setKeysOnly(on) {
+    keysOnly = on;
+    store.set('keysOnly', on ? '1' : '0');
+    diagram.setKeysOnly(on);
+    renderViewbar();
+  }
+
+  // ----------------------------------------------------------- view bar
+  function renderViewbar() {
+    if (!model) { viewbar.innerHTML = ''; return; }
+    const total = model.tables.length;
+    const shown = diagram.visible ? diagram.visible.size : total;
+    let h = `<span class="chip chip-mode${mode.type === 'all' ? '' : ' on'}">${esc(modeLabel(mode))}${mode.type !== 'all' ? ` <span class="chip-count">${shown} of ${total}</span>` : ''}</span>`;
+    if (mode.type === 'focus') {
+      h += `<span class="seg" role="group" aria-label="Neighbour depth">${[1, 2, 3].map((n) => `<button data-hops="${n}" aria-pressed="${mode.hops === n}" title="Show tables up to ${n} step${n === 1 ? '' : 's'} away">±${n}</button>`).join('')}</span>`;
+    }
+    if (mode.type !== 'all') h += '<button class="chip" data-act="all" title="Esc">Show all</button>';
+    if (selected && !(mode.type === 'focus' && mode.key === selected)) {
+      h += `<button class="chip" data-act="focus-selected">Focus on ${esc(selected)}</button>`;
+    }
+    h += `<button class="chip" data-act="keys" aria-pressed="${keysOnly}" title="Show only primary and foreign key columns">Keys only</button>`;
+    viewbar.innerHTML = h;
+  }
+
+  viewbar.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.hops) focusOn(mode.key, +b.dataset.hops);
+    else if (b.dataset.act === 'all') setMode({ type: 'all' });
+    else if (b.dataset.act === 'focus-selected') focusOn(selected);
+    else if (b.dataset.act === 'keys') setKeysOnly(!keysOnly);
+  });
+
+  // -------------------------------------------------------------- outline
+  const FOCUS_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>';
+
+  function renderOutline() {
+    if (!model) return;
+    const q = filterInput.value.trim().toLowerCase();
+    const vis = diagram.visible;
+    let h = '';
+
+    if (!q) {
+      const views = [
+        { label: 'All tables', meta: model.tables.length, m: { type: 'all' } },
+        ...model.groups.map((g) => ({ label: g.name, meta: g.tables.length, m: { type: 'group', name: g.name }, color: g.color, kind: 'group' })),
+        ...savedViews.map((v) => ({ label: v.name, meta: v.tables.filter((k) => model.tables.some((t) => t.key === k)).length, m: { type: 'saved', name: v.name }, kind: 'saved' })),
+      ];
+      h += '<div class="o-section">Views</div>';
+      for (const v of views) {
+        const active = mode.type === v.m.type && (mode.name || null) === (v.m.name || null);
+        h += `<div class="o-row"><button class="o-item${active ? ' active' : ''}" data-mode="${esc(JSON.stringify(v.m))}">`;
+        h += v.kind === 'group' ? `<span class="o-swatch group" style="border-color:${esc(v.color || '#7F8FA6')}"></span>` : v.kind === 'saved' ? '<span class="o-glyph">★</span>' : '<span class="o-glyph">▦</span>';
+        h += `<span class="o-name">${esc(v.label)}</span><span class="o-meta">${v.meta}</span></button>`;
+        if (v.kind === 'saved') h += `<button class="o-btn" data-delete-view="${esc(v.label)}" title="Delete view “${esc(v.label)}”" aria-label="Delete view ${esc(v.label)}">×</button>`;
+        h += '</div>';
+      }
+      h += '<button class="o-add" data-act="save-view">+ Save current view…</button>';
+    }
+
+    const rows = [];
+    for (const t of model.tables) {
+      const nameHit = !q || t.key.toLowerCase().includes(q) || (t.alias || '').toLowerCase().includes(q);
+      const cols = q ? t.columns.filter((c) => c.name.toLowerCase().includes(q)) : [];
+      if (!nameHit && !cols.length) continue;
+      rows.push({ t, cols: nameHit ? [] : cols });
+    }
+    h += `<div class="o-section">Tables <span class="o-meta">${q ? `${rows.length} of ` : ''}${model.tables.length}</span></div>`;
+    for (const { t, cols } of rows) {
+      const hidden = vis && !vis.has(t.key);
+      h += `<div class="o-row${hidden ? ' hidden-in-view' : ''}"><button class="o-item${t.key === selected ? ' active' : ''}" data-table="${esc(t.key)}" title="${hidden ? 'Not in the current view — click to show all tables and go to it' : 'Go to table'}">`;
+      h += `<span class="o-swatch" style="background:${esc(t.color || '#2F5D8A')}"></span><span class="o-name">${esc(t.key)}</span><span class="o-meta">${t.columns.length}</span></button>`;
+      h += `<button class="o-btn" data-focus="${esc(t.key)}" title="Focus on ${esc(t.key)} and its neighbours" aria-label="Focus on ${esc(t.key)}">${FOCUS_ICON}</button></div>`;
+      for (const c of cols) {
+        h += `<button class="o-sub" data-table="${esc(t.key)}" data-col="${esc(c.name)}"><span class="o-name">${esc(c.name)}</span><span class="o-meta">${esc(c.type)}</span></button>`;
+      }
+    }
+
+    const enums = model.enums.filter((e) => !q || e.key.toLowerCase().includes(q) || e.values.some((v) => v.name.toLowerCase().includes(q)));
+    if (enums.length) {
+      h += `<div class="o-section">Enums <span class="o-meta">${enums.length}</span></div>`;
+      for (const e of enums) {
+        h += `<div class="o-row"><button class="o-item" data-line="${e.line}" data-enum="${esc(e.key)}" title="Go to enum"><span class="o-glyph enum">E</span><span class="o-name">${esc(e.key)}</span><span class="o-meta">${e.values.length}</span></button></div>`;
+      }
+    }
+    if (q && !rows.length && !enums.length) h += `<div class="o-empty">Nothing matches “${esc(q)}”.</div>`;
+    outlineEl.innerHTML = h;
+  }
+
+  outlineEl.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.mode) {
+      const m = JSON.parse(b.dataset.mode);
+      if (tab === 'docs' && m.type === 'all') docsPane.scrollTop = 0;
+      else if (tab === 'docs' && m.type === 'group') scrollDocsTo('g', m.name, true);
+      else { if (tab === 'docs') setTab('diagram'); setMode(m); }
+    } else if (b.dataset.deleteView) deleteView(b.dataset.deleteView);
+    else if (b.dataset.act === 'save-view') openPalette('name-view');
+    else if (b.dataset.focus) { if (tab === 'docs') setTab('diagram'); focusOn(b.dataset.focus); }
+    else if (b.dataset.table) goToTable(b.dataset.table, b.dataset.col);
+    else if (b.dataset.enum && tab === 'docs') scrollDocsTo('e', b.dataset.enum, true);
+    else if (b.dataset.line) goToCode(+b.dataset.line);
+  });
+  filterInput.addEventListener('input', () => { renderOutline(); renderDocs({ top: true }); });
+  filterInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { filterInput.value = ''; renderOutline(); renderDocs({ top: true }); filterInput.blur(); }
+    if (e.key === 'Enter') { const first = outlineEl.querySelector('[data-table]'); if (first) first.click(); }
+  });
+
+  function goToTable(key, colName) {
+    const t = model && model.tables.find((x) => x.key === key);
+    if (!t) return;
+    if (tab === 'docs') {
+      selected = key;
+      diagram.select(key);
+      scrollDocsTo('t', key, true);
+      renderOutline();
+      return;
+    }
+    if (diagram.visible && !diagram.visible.has(key)) setMode({ type: 'all' }, { fit: false });
+    selected = key;
+    diagram.focusTable(key);
+    renderOutline();
+    renderViewbar();
+    const col = colName && t.columns.find((c) => c.name === colName);
+    goToCode(col ? col.line : t.line, true);
+  }
+
+  function goToCode(line, keepFocus) {
+    if (tab === 'docs' && !split.classList.contains('docs-editor')) {
+      if (keepFocus) return;
+      toggleEditor(true);
+    } else if (tab !== 'docs' && split.classList.contains('no-editor')) {
+      if (keepFocus) return; // editor hidden: navigating the outline shouldn't reopen it
+      toggleEditor(true);
+    }
+    const active = document.activeElement;
+    editor.goTo(line);
+    if (keepFocus && active && active !== document.body) active.focus();
+  }
+
+  // --------------------------------------------------------- panes
+  function toggleRail(force) {
+    const show = force ?? split.classList.contains('no-rail');
+    split.classList.toggle('no-rail', !show);
+    store.set('rail', show ? '1' : '0');
+    requestAnimationFrame(() => diagram.applyView());
+  }
+  function toggleEditor(force) {
+    if (tab === 'docs') {
+      split.classList.toggle('docs-editor', force ?? !split.classList.contains('docs-editor'));
+      return;
+    }
+    const show = force ?? split.classList.contains('no-editor');
+    split.classList.toggle('no-editor', !show);
+    store.set('editor', show ? '1' : '0');
+    requestAnimationFrame(() => diagram.applyView());
+  }
+  if (store.get('rail') === '0') split.classList.add('no-rail');
+  if (store.get('editor') === '0') split.classList.add('no-editor');
+
+  // ------------------------------------------------------- command palette
+  const palette = $('#palette');
+  const pInput = $('#palette-input');
+  const pList = $('#palette-list');
+  let pItems = [];
+  let pIndex = 0;
+  let pMode = 'commands';
+
+  function commands() {
+    const list = [];
+    const add = (group, label, run, hint) => list.push({ group, label, run, hint });
+    if (model) {
+      for (const t of model.tables) add('Table', t.key, () => goToTable(t.key), `${t.columns.length} columns`);
+      for (const t of model.tables) add('Focus', `Focus on ${t.key}`, () => { if (tab === 'docs') setTab('diagram'); focusOn(t.key); }, 'and its neighbours');
+      add('View', tab === 'docs' ? 'Switch to Diagram' : 'Switch to Docs', () => setTab(tab === 'docs' ? 'diagram' : 'docs'), 'D');
+      add('View', 'Show all tables', () => { if (tab === 'docs') setTab('diagram'); setMode({ type: 'all' }); }, 'Esc');
+      for (const g of model.groups) add('View', `Show group: ${g.name}`, () => { if (tab === 'docs') setTab('diagram'); setMode({ type: 'group', name: g.name }); }, `${g.tables.length} tables`);
+      for (const v of savedViews) add('View', `Show view: ${v.name}`, () => { if (tab === 'docs') setTab('diagram'); setMode({ type: 'saved', name: v.name }); }, `${v.tables.length} tables`);
+      add('View', 'Save current view as…', () => openPalette('name-view'));
+      for (const v of savedViews) add('View', `Delete view: ${v.name}`, () => deleteView(v.name));
+      for (const e of model.enums) add('Enum', `Go to enum ${e.key}`, () => (tab === 'docs' ? scrollDocsTo('e', e.key, true) : goToCode(e.line)));
+      add('Display', keysOnly ? 'Show all columns' : 'Show key columns only', () => setKeysOnly(!keysOnly));
+      add('Display', 'Fit diagram to screen', () => diagram.fit(), 'F');
+      add('Display', 'Zoom to 100%', () => diagram.zoomTo(1), '1');
+      add('Display', 'Auto-arrange tables', autoArrange);
+    }
+    add('Display', split.classList.contains('no-rail') ? 'Show outline' : 'Hide outline', () => toggleRail(), `${MOD}B`);
+    const editorShown = tab === 'docs' ? split.classList.contains('docs-editor') : !split.classList.contains('no-editor');
+    add('Display', editorShown ? 'Hide code editor' : 'Show code editor', () => toggleEditor(), `${MOD}\\`);
+    add('File', 'Import information schema (CSV or text)…', () => openImport());
+    add('File', 'Open a .dbml file…', () => $('#file').click(), `${MOD}O`);
+    add('File', 'Save DBML', saveDbml, `${MOD}S`);
+    add('File', 'Export diagram as SVG', exportSvg);
+    add('File', 'Export diagram as PNG', exportPng);
+    add('File', 'Export docs as HTML page', exportDocs);
+    add('File', 'Copy share link', share);
+    add('File', 'Load the example schema (replaces your DBML)', loadExample);
+    if (store.get('previous')) add('File', 'Restore previous DBML', restorePrevious);
+    return list;
+  }
+
+  function score(label, q) {
+    const l = label.toLowerCase();
+    const i = l.indexOf(q);
+    if (i >= 0) return i === 0 ? 0 : (' _.:'.includes(l[i - 1]) ? 1 : 2) + i / 1000;
+    let j = 0;
+    for (const ch of l) if (ch === q[j]) j++;
+    return j === q.length ? 5 + l.length / 1000 : Infinity;
+  }
+
+  function renderPalette() {
+    const raw = pInput.value.trim();
+    const q = raw.toLowerCase();
+    if (pMode === 'name-view') {
+      const n = diagram.visible ? diagram.visible.size : (model ? model.tables.length : 0);
+      pItems = raw ? [{ group: 'View', label: `Save view “${raw}”`, hint: `${n} tables`, run: () => saveView(raw) }] : [];
+      if (!raw) pList.innerHTML = `<div class="p-empty">Type a name for the ${n} table${n === 1 ? '' : 's'} on screen, then press Enter.</div>`;
+    } else {
+      const all = commands();
+      if (q) {
+        pItems = all.map((c) => ({ c, s: score(c.label, q) })).filter((x) => x.s < Infinity)
+          .sort((a, b) => a.s - b.s || a.c.label.length - b.c.label.length).slice(0, 60).map((x) => x.c);
+      } else {
+        // empty query: tables first, then views and commands
+        pItems = all.filter((c) => c.group === 'Table').concat(all.filter((c) => !['Table', 'Focus', 'Enum'].includes(c.group)));
+      }
+      if (!pItems.length) pList.innerHTML = `<div class="p-empty">No tables or commands match “${esc(raw)}”.</div>`;
+    }
+    if (pItems.length) {
+      pIndex = Math.max(0, Math.min(pIndex, pItems.length - 1));
+      pList.innerHTML = pItems.map((c, i) => `<div class="p-item${i === pIndex ? ' sel' : ''}" role="option" data-i="${i}" aria-selected="${i === pIndex}"><span class="p-group">${esc(c.group)}</span><span class="p-label">${esc(c.label)}</span>${c.hint ? `<span class="p-hint">${esc(c.hint)}</span>` : ''}</div>`).join('');
+      const sel = pList.querySelector('.sel');
+      if (sel) sel.scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  let pReturnFocus = null;
+  function openPalette(kind) {
+    if (palette.hidden) pReturnFocus = document.activeElement;
+    pMode = kind || 'commands';
+    pInput.value = '';
+    pInput.placeholder = pMode === 'name-view' ? 'Name this view' : 'Search tables, views and commands';
+    pIndex = 0;
+    palette.hidden = false;
+    renderPalette();
+    pInput.focus();
+  }
+  function closePalette() {
+    palette.hidden = true;
+    if (pReturnFocus && document.contains(pReturnFocus) && pReturnFocus !== document.body) pReturnFocus.focus();
+    pReturnFocus = null;
+  }
+  function runPalette(i) {
+    const item = pItems[i];
+    if (!item) return;
+    if (item.label === 'Save current view as…') { item.run(); return; }
+    closePalette();
+    item.run();
+  }
+
+  pInput.addEventListener('input', () => { pIndex = 0; renderPalette(); });
+  pInput.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); pIndex = Math.min(pItems.length - 1, pIndex + 1); renderPalette(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); pIndex = Math.max(0, pIndex - 1); renderPalette(); }
+    else if (e.key === 'Enter') { e.preventDefault(); runPalette(pIndex); }
+    else if (e.key === 'Escape') { e.preventDefault(); closePalette(); }
+  });
+  pList.addEventListener('mousemove', (e) => {
+    const it = e.target.closest('.p-item');
+    if (it && +it.dataset.i !== pIndex) {
+      pList.querySelectorAll('.p-item.sel').forEach((n) => { n.classList.remove('sel'); n.setAttribute('aria-selected', 'false'); });
+      it.classList.add('sel');
+      it.setAttribute('aria-selected', 'true');
+      pIndex = +it.dataset.i;
+    }
+  });
+  pList.addEventListener('click', (e) => { const it = e.target.closest('.p-item'); if (it) runPalette(+it.dataset.i); });
+  palette.addEventListener('pointerdown', (e) => { if (e.target === palette) closePalette(); });
+  $('#btn-palette').onclick = () => openPalette();
+
+  // ------------------------------------------------------------ actions
+  function download(name, data, type) {
+    const blob = data instanceof Blob ? data : new Blob([data], { type });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
+  const baseName = () => (fileName ? fileName.replace(/\.[^.]+$/, '') : (model && model.project && model.project.name) || 'schema');
+
+  function toast(msg) {
+    const t = $('#toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(() => t.classList.remove('show'), 2600);
+  }
+
+  function saveDbml() { download(`${baseName()}.dbml`, editor.value, 'text/plain'); }
+  function exportDocs() {
+    if (!model) return;
+    download(`${baseName()}-docs.html`, DBMLDocs.exportHTML(model), 'text/html');
+  }
+  function exportSvg() { if (model) download(`${baseName()}.svg`, diagram.toSVG().svg, 'image/svg+xml'); }
+  async function exportPng() {
+    if (!model) return;
+    try { download(`${baseName()}.png`, await diagram.toPNG(2)); } catch (e) { toast(e.message); }
+  }
+  function autoArrange() {
+    if (!model) return;
+    const auto = DBMLLayout.autoLayout(model, DBMLDiagram.measureTables(model, false));
+    for (const k in auto) positions[k] = auto[k];
+    savePositions();
+    diagram.setModel(model, auto);
+    diagram.fit();
+  }
+  async function share() {
+    try {
+      const url = `${location.href.split('#')[0]}#dbml=${await encode(editor.value)}`;
+      history.replaceState(null, '', url);
+      await navigator.clipboard.writeText(url);
+      toast('Link copied to clipboard');
+    } catch (e) {
+      toast('Link is in the address bar — copy it from there');
+    }
+  }
+  function loadExample() {
+    const had = editor.value.trim() && editor.value !== DBML_SAMPLE;
+    if (had) store.set('previous', editor.value);
+    fileName = null;
+    store.set('fileName', '');
+    loadText(DBML_SAMPLE, true);
+    if (had) toast(`Example loaded. To get your DBML back: ${MOD}K → Restore previous DBML`);
+  }
+  function restorePrevious() {
+    const prev = store.get('previous');
+    if (!prev) return;
+    store.set('previous', editor.value);
+    loadText(prev, true);
+    toast('Previous DBML restored');
+  }
+  function loadText(text, resetLayout) {
+    if (resetLayout) {
+      positions = {};
+      savePositions();
+      firstRender = true;
+      mode = { type: 'all' };
+      store.set('mode', JSON.stringify(mode));
+      selected = null;
+    }
+    editor.value = text;
+    update();
+  }
+  async function openFile(f) {
+    if (!f) return;
+    if (editor.value.trim()) store.set('previous', editor.value);
+    fileName = f.name;
+    store.set('fileName', f.name);
+    loadText(await f.text(), true);
+  }
+
+  $('#btn-open').onclick = () => $('#file').click();
+  $('#file').onchange = (e) => { openFile(e.target.files[0]); e.target.value = ''; };
+  $('#btn-save').onclick = saveDbml;
+  $('#btn-share').onclick = share;
+  $('#btn-layout').onclick = autoArrange;
+  $('#btn-fit').onclick = () => diagram.fit();
+  $('#btn-zoom-in').onclick = () => diagram.zoomBy(1.2);
+  $('#btn-zoom-out').onclick = () => diagram.zoomBy(1 / 1.2);
+  zoomLabel.onclick = () => diagram.zoomTo(1);
+
+  const exportBtn = $('#btn-export'), exportMenu = $('#export-menu');
+  const closeMenu = () => { exportMenu.hidden = true; exportBtn.setAttribute('aria-expanded', 'false'); };
+  exportBtn.onclick = (e) => {
+    e.stopPropagation();
+    exportMenu.hidden = !exportMenu.hidden;
+    exportBtn.setAttribute('aria-expanded', String(!exportMenu.hidden));
+  };
+  exportMenu.onclick = (e) => {
+    const k = e.target.closest('[data-export]');
+    if (!k) return;
+    closeMenu();
+    ({ svg: exportSvg, png: exportPng, docs: exportDocs, dbml: saveDbml })[k.dataset.export]();
+  };
+  document.addEventListener('click', closeMenu);
+
+  // ------------------------------------------------- information schema
+  const importModal = $('#import');
+  const impText = $('#imp-text');
+  const impInput = document.querySelector('.imp-input');
+  const impSummary = $('#imp-summary');
+  const impIssues = $('#imp-issues');
+  const impPre = $('#imp-dbml');
+  const impGroup = $('#imp-group');
+  const impFileName = $('#imp-file-name');
+  let impResult = null;
+  let impSource = null;     // file name the rows came from, if any
+  let impReturnFocus = null;
+  let impTimer = null;
+
+  const IMPORT_EXAMPLE = [
+    'database_name,schema_name,table_name,column_name,data_type,is_primary_key',
+    'campus,enrolment,students,id,integer,YES',
+    'campus,enrolment,students,full_name,character varying(120),NO',
+    'campus,enrolment,students,born_on,date,NO',
+    'campus,enrolment,enrolments,student_id,integer,YES',
+    'campus,enrolment,enrolments,course_id,integer,YES',
+    'campus,enrolment,enrolments,grade,"numeric(4,1)",NO',
+    'campus,catalog,courses,id,integer,YES',
+    'campus,catalog,courses,title,text,NO',
+    'campus,catalog,courses,starts_at,timestamp with time zone,NO',
+  ].join('\n');
+
+  const impMode = () => document.querySelector('input[name="imp-mode"]:checked').value;
+
+  function renderImport() {
+    impIssues.innerHTML = '';
+    impPre.innerHTML = '';
+    impSummary.classList.remove('bad');
+    impResult = null;
+    const text = impText.value;
+    if (!text.trim()) {
+      impSummary.innerHTML = 'The generated DBML will appear here.<span class="muted">This input has no foreign-key information, so tables are created without relationships.</span>';
+      return;
+    }
+    const res = DBMLImport.convert(text, { groupBySchema: impGroup.checked });
+    const issues = res.errors.map((m) => ({ m, err: true })).concat(res.warnings.map((m) => ({ m })));
+    if (!res.errors.length) {
+      // make sure the result (and the combined text, when adding) is valid DBML
+      const candidate = impMode() === 'append' && editor.value.trim() ? `${editor.value.replace(/\s+$/, '')}\n\n${res.dbml}` : res.dbml;
+      try {
+        DBML.parse(candidate);
+        impResult = { dbml: res.dbml, stats: res.stats };
+      } catch (e) {
+        const msg = impMode() === 'append'
+          ? `Can't add to your current DBML: ${e.message}. Choose “Replace current DBML” or remove the clash first.`
+          : `The generated DBML didn't parse: ${e.message} (line ${e.line}).`;
+        issues.unshift({ m: msg, err: true });
+      }
+    }
+    const shown = issues.slice(0, 12);
+    impIssues.innerHTML = shown.map((i) => `<li class="${i.err ? 'err' : ''}">${esc(i.m)}</li>`).join('') +
+      (issues.length > shown.length ? `<li>…and ${issues.length - shown.length} more.</li>` : '');
+    if (res.stats) {
+      const st = res.stats;
+      const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+      impSummary.innerHTML = `<b>${plural(st.tables, 'table')}</b> · ${plural(st.columns, 'column')} · ${plural(st.schemas, 'schema')} · ${plural(st.databases, 'database')}` +
+        '<span class="muted">No relationships: this input has no foreign-key information.</span>';
+      impPre.innerHTML = DBMLEditor.highlight(res.dbml);
+    } else {
+      impSummary.textContent = 'Nothing to import yet.';
+    }
+    if (!impResult) impSummary.classList.add('bad');
+  }
+  const scheduleImport = () => { clearTimeout(impTimer); impTimer = setTimeout(renderImport, 150); };
+
+  async function openImport(file) {
+    if (importModal.hidden) impReturnFocus = document.activeElement;
+    if (!palette.hidden) closePalette();
+    importModal.hidden = false;
+    if (file) {
+      impText.value = await file.text();
+      impSource = file.name;
+      impFileName.textContent = file.name;
+    }
+    renderImport();
+    impText.focus();
+  }
+  function closeImport() {
+    importModal.hidden = true;
+    if (impReturnFocus && document.contains(impReturnFocus) && impReturnFocus !== document.body) impReturnFocus.focus();
+  }
+  function runImport() {
+    renderImport();
+    if (!impResult) { impText.focus(); return; }
+    const { dbml, stats } = impResult;
+    const n = `${stats.tables} table${stats.tables === 1 ? '' : 's'}`;
+    if (impMode() === 'append' && editor.value.trim()) {
+      editor.value = `${editor.value.replace(/\s+$/, '')}\n\n${dbml}`;
+      update();
+      toast(`Added ${n}`);
+    } else {
+      if (editor.value.trim()) store.set('previous', editor.value);
+      fileName = impSource ? impSource.replace(/\.[^.]+$/, '.dbml') : null;
+      store.set('fileName', fileName || '');
+      loadText(dbml, true);
+      toast(`Imported ${n}. To undo: ${MOD}K → Restore previous DBML`);
+    }
+    closeImport();
+  }
+
+  impText.addEventListener('input', () => { impSource = null; impFileName.textContent = ''; scheduleImport(); });
+  impGroup.addEventListener('change', renderImport);
+  document.querySelectorAll('input[name="imp-mode"]').forEach((r) => r.addEventListener('change', renderImport));
+  $('#imp-file-btn').onclick = () => $('#imp-file').click();
+  $('#imp-file').onchange = (e) => { const f = e.target.files[0]; if (f) openImport(f); e.target.value = ''; };
+  $('#imp-example').onclick = () => { impText.value = IMPORT_EXAMPLE; impSource = null; impFileName.textContent = 'Example rows (fictional)'; renderImport(); };
+  $('#imp-close').onclick = closeImport;
+  $('#imp-cancel').onclick = closeImport;
+  $('#imp-go').onclick = runImport;
+  $('#btn-import').onclick = () => openImport();
+  importModal.addEventListener('pointerdown', (e) => { if (e.target === importModal) closeImport(); });
+  impInput.addEventListener('dragover', () => impInput.classList.add('dragging'));
+  impInput.addEventListener('dragleave', (e) => { if (!impInput.contains(e.relatedTarget)) impInput.classList.remove('dragging'); });
+
+  // --------------------------------------------------------------- docs
+  function setTab(t) {
+    tab = t;
+    store.set('tab', t);
+    split.classList.toggle('docs', t === 'docs');
+    $('#tab-diagram').setAttribute('aria-selected', String(t === 'diagram'));
+    $('#tab-docs').setAttribute('aria-selected', String(t === 'docs'));
+    if (t === 'docs') {
+      renderDocs();
+      if (selected) scrollDocsTo('t', selected, false);
+    } else {
+      requestAnimationFrame(() => {
+        diagram.applyView();
+        if (needsFit) { needsFit = false; diagram.fit(); }
+        diagram.select(selected);
+      });
+    }
+    renderOutline();
+  }
+
+  function renderDocs(opts = {}) {
+    if (!model || tab !== 'docs') return;
+    const top = docsPane.scrollTop;
+    DBMLDocs.render(docsEl, model, { query: filterInput.value, scrollRoot: docsPane });
+    docsPane.scrollTop = opts.top ? 0 : top;
+  }
+
+  function scrollDocsTo(kind, key, flash) {
+    let el = DBMLDocs.sectionFor(kind, key);
+    if (!el && filterInput.value) {
+      filterInput.value = '';
+      renderOutline();
+      renderDocs();
+      el = DBMLDocs.sectionFor(kind, key);
+    }
+    if (!el) return;
+    spyPaused = true;
+    el.scrollIntoView({ block: 'start' });
+    setTimeout(() => { spyPaused = false; }, 120);
+    if (flash) { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
+  }
+
+  async function copyTableLink(key) {
+    try {
+      const url = `${location.href.split('#')[0]}#dbml=${await encode(editor.value)}&tab=docs&table=${encodeURIComponent(key)}`;
+      await navigator.clipboard.writeText(url);
+      toast(`Link to ${key} copied`);
+    } catch (e) {
+      toast('Could not copy the link here');
+    }
+  }
+
+  docsEl.addEventListener('click', (e) => {
+    const a = e.target.closest('a[data-table], a[data-enum], a[data-group]');
+    if (a) {
+      e.preventDefault();
+      if (a.dataset.table) {
+        selected = a.dataset.table;
+        diagram.select(selected);
+        scrollDocsTo('t', selected, true);
+        renderOutline();
+      } else if (a.dataset.enum) scrollDocsTo('e', a.dataset.enum, true);
+      else scrollDocsTo('g', a.dataset.group, true);
+      return;
+    }
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.show) {
+      const key = b.dataset.show;
+      selected = key;
+      setTab('diagram');
+      if (diagram.visible && !diagram.visible.has(key)) setMode({ type: 'all' }, { fit: false });
+      requestAnimationFrame(() => diagram.focusTable(key));
+      renderViewbar();
+    } else if (b.dataset.copy) copyTableLink(b.dataset.copy);
+    else if ('clearFilter' in b.dataset) { filterInput.value = ''; renderOutline(); renderDocs({ top: true }); }
+  });
+
+  // keep the outline's highlight on the table being read
+  let spyPaused = false;
+  let spyQueued = false;
+  docsPane.addEventListener('scroll', () => {
+    if (spyQueued || spyPaused) return;
+    spyQueued = true;
+    requestAnimationFrame(() => {
+      spyQueued = false;
+      const paneTop = docsPane.getBoundingClientRect().top;
+      let key = null;
+      for (const sec of docsEl.querySelectorAll('section.d-table')) {
+        if (sec.getBoundingClientRect().top - paneTop <= 80) key = sec.getAttribute('data-key');
+        else break;
+      }
+      if (key === selected) return;
+      selected = key;
+      outlineEl.querySelectorAll('.o-item[data-table]').forEach((n) => {
+        const on = n.getAttribute('data-table') === key;
+        n.classList.toggle('active', on);
+        if (on) n.scrollIntoView({ block: 'nearest' });
+      });
+    });
+  }, { passive: true });
+
+  $('#tab-diagram').onclick = () => setTab('diagram');
+  $('#tab-docs').onclick = () => setTab('docs');
+
+  // ----------------------------------------------------------- keyboard
+  const typing = (el) => el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+  document.addEventListener('keydown', (e) => {
+    const mod = e.metaKey || e.ctrlKey;
+    const k = e.key.toLowerCase();
+    if (!importModal.hidden) {
+      if (k === 'escape') { e.preventDefault(); closeImport(); }
+      else if (mod && k === 'enter') { e.preventDefault(); runImport(); }
+      return;
+    }
+    if (mod && k === 'k') { e.preventDefault(); if (palette.hidden) openPalette(); else closePalette(); return; }
+    if (!palette.hidden) return;
+    if (mod && k === 's') { e.preventDefault(); saveDbml(); return; }
+    if (mod && k === 'o') { e.preventDefault(); $('#file').click(); return; }
+    if (mod && k === 'b') { e.preventDefault(); toggleRail(); return; }
+    if (mod && e.key === '\\') { e.preventDefault(); toggleEditor(); return; }
+    if (k === 'escape' && !exportMenu.hidden) { closeMenu(); return; }
+    if (mod || e.altKey || typing(document.activeElement)) return;
+    if (k === 'd') { e.preventDefault(); setTab(tab === 'docs' ? 'diagram' : 'docs'); }
+    else if (k === 'f' && tab === 'diagram') { e.preventDefault(); diagram.fit(); }
+    else if (k === '1' && tab === 'diagram') { e.preventDefault(); diagram.zoomTo(1); }
+    else if (k === '/') { e.preventDefault(); if (split.classList.contains('no-rail')) toggleRail(true); filterInput.focus(); filterInput.select(); }
+    else if (k === 'escape') {
+      if (tab === 'docs') { if (filterInput.value) { filterInput.value = ''; renderOutline(); renderDocs({ top: true }); } }
+      else if (mode.type !== 'all') setMode({ type: 'all' });
+      else if (selected) { selected = null; diagram.select(null); renderOutline(); renderViewbar(); }
+    }
+  });
+
+  // drag & drop a .dbml file anywhere
+  document.addEventListener('dragover', (e) => { e.preventDefault(); document.body.classList.add('dropping'); });
+  document.addEventListener('dragleave', (e) => { if (!e.relatedTarget) document.body.classList.remove('dropping'); });
+  document.addEventListener('drop', (e) => {
+    e.preventDefault();
+    document.body.classList.remove('dropping');
+    impInput.classList.remove('dragging');
+    const f = e.dataTransfer.files[0];
+    if (!f) return;
+    if (!importModal.hidden || /\.(csv|tsv)$/i.test(f.name) || /csv|tab-separated/.test(f.type)) openImport(f);
+    else openFile(f);
+  });
+
+  // ---------------------------------------------------------- share links
+  async function encode(text) {
+    const bytes = new TextEncoder().encode(text);
+    let data = bytes;
+    const z = typeof CompressionStream !== 'undefined';
+    if (z) {
+      const cs = new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+      data = new Uint8Array(await new Response(cs).arrayBuffer());
+    }
+    let bin = '';
+    data.forEach((b) => { bin += String.fromCharCode(b); });
+    return (z ? 'z' : 'r') + btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  async function decode(s) {
+    const b64 = s.slice(1).replace(/-/g, '+').replace(/_/g, '/');
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    if (s[0] === 'z') {
+      const ds = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+      return new TextDecoder().decode(await new Response(ds).arrayBuffer());
+    }
+    return new TextDecoder().decode(bytes);
+  }
+
+  // ------------------------------------------------------ editor resizer
+  const editorPane = document.querySelector('.editor-pane');
+  const setSplit = (w) => {
+    const max = Math.max(280, window.innerWidth - (split.classList.contains('no-rail') ? 0 : 220) - 340);
+    const clamped = Math.max(260, Math.min(max, w));
+    split.style.setProperty('--editor-w', `${clamped}px`);
+    return clamped;
+  };
+  const savedSplit = parseFloat(store.get('split'));
+  if (savedSplit) setSplit(savedSplit);
+  $('#resizer').addEventListener('pointerdown', (e) => {
+    const r = $('#resizer');
+    r.setPointerCapture(e.pointerId);
+    document.body.classList.add('resizing');
+    const left = editorPane.getBoundingClientRect().left;
+    const move = (ev) => { setSplit(ev.clientX - left); diagram.applyView(); };
+    const up = (ev) => {
+      store.set('split', String(setSplit(ev.clientX - left)));
+      document.body.classList.remove('resizing');
+      r.removeEventListener('pointermove', move);
+      r.removeEventListener('pointerup', up);
+    };
+    r.addEventListener('pointermove', move);
+    r.addEventListener('pointerup', up);
+  });
+
+  // ----------------------------------------------------------------- boot
+  (async function boot() {
+    let src = null;
+    const m = /#dbml=([\w-]+)/.exec(location.hash);
+    if (m) {
+      try {
+        src = await decode(m[1]);
+        positions = {};
+        mode = { type: 'all' };
+        fileName = null;
+      } catch (e) { toast('Could not read the shared link'); }
+    }
+    const tabParam = /[#&]tab=(docs|diagram)/.exec(location.hash);
+    const tableParam = /[#&]table=([^&]+)/.exec(location.hash);
+    if (tabParam) { tab = tabParam[1]; split.classList.toggle('docs', tab === 'docs'); }
+    if (src == null) src = store.get('source');
+    if (src == null || !src.trim()) src = DBML_SAMPLE;
+    editor.value = src;
+    update();
+    if (tableParam) {
+      try { selected = decodeURIComponent(tableParam[1]); } catch (e) { selected = null; }
+      if (selected && !(model && model.tables.some((t) => t.key === selected))) selected = null;
+    }
+    setTab(tab);
+  })();
+
+  window.addEventListener('resize', () => { if (model) diagram.applyView(); });
+})();
+</script>
+</body>
+</html>

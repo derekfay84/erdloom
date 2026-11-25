@@ -1,0 +1,26 @@
+{
+  "name": "erdloom",
+  "version": "0.1.0",
+  "description": "ERDLoom: a DBML editor with a live entity-relationship diagram, no dependencies",
+  "private": true,
+  "license": "MIT",
+  "author": "Derek Fay",
+  "scripts": {
+    "start": "python3 -m http.server 5173",
+    "test": "node --test test/*.test.js",
+    "build": "node scripts/build.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/derekfay84/erdloom.git"
+  },
+  "homepage": "https://github.com/derekfay84/erdloom#readme",
+  "keywords": [
+    "dbml",
+    "erd",
+    "entity-relationship-diagram",
+    "database",
+    "schema",
+    "diagram"
+  ]
+}
