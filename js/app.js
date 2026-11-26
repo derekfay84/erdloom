@@ -45,6 +45,44 @@
   });
   diagram.setKeysOnly(keysOnly);
 
+  // ---------------------------------------------------------------- theme
+  // 'system' follows the OS setting, live. index.html applies the theme before
+  // first paint; this keeps it in step afterwards and tells the diagram.
+  const THEMES = ['system', 'light', 'dark'];
+  const THEME_LABEL = { system: 'Match system', light: 'Light', dark: 'Dark' };
+  const THEME_ICON = {
+    system: '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/></svg>',
+    light: '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+    dark: '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
+  };
+  const darkQuery = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  let themePref = THEMES.includes(store.get('theme')) ? store.get('theme') : 'system';
+  const effectiveTheme = () => (themePref === 'system' ? (darkQuery && darkQuery.matches ? 'dark' : 'light') : themePref);
+  const themeBtn = $('#btn-theme');
+
+  function applyTheme() {
+    const t = effectiveTheme();
+    document.documentElement.setAttribute('data-theme', t);
+    diagram.setTheme(t);
+    const next = THEMES[(THEMES.indexOf(themePref) + 1) % THEMES.length];
+    themeBtn.innerHTML = THEME_ICON[themePref];
+    themeBtn.title = `Theme: ${THEME_LABEL[themePref]}${themePref === 'system' ? ` (${t})` : ''}. Click for ${THEME_LABEL[next].toLowerCase()}.`;
+    themeBtn.setAttribute('aria-label', `Theme: ${THEME_LABEL[themePref]}`);
+  }
+  function setTheme(pref) {
+    themePref = pref;
+    store.set('theme', pref);
+    applyTheme();
+    toast(`Theme: ${THEME_LABEL[pref]}${pref === 'system' ? ` (${effectiveTheme()} right now)` : ''}`);
+  }
+  themeBtn.onclick = () => setTheme(THEMES[(THEMES.indexOf(themePref) + 1) % THEMES.length]);
+  if (darkQuery) {
+    const onChange = () => { if (themePref === 'system') applyTheme(); };
+    if (darkQuery.addEventListener) darkQuery.addEventListener('change', onChange);
+    else if (darkQuery.addListener) darkQuery.addListener(onChange);
+  }
+  applyTheme();
+
   const editor = new DBMLEditor.Editor($('#editor'), { onChange: schedule });
 
   function savePositions() { store.set('positions', JSON.stringify(positions)); }
@@ -402,6 +440,7 @@
       add('Schema', 'Suggest relationships and groups…', () => openSuggest(), 'from names and keys');
     }
     add('Display', split.classList.contains('no-rail') ? 'Show outline' : 'Hide outline', () => toggleRail(), `${MOD}B`);
+    for (const t of THEMES) if (t !== themePref) add('Display', t === 'system' ? 'Theme: match system' : `Theme: ${t}`, () => setTheme(t));
     const editorShown = tab === 'docs' ? split.classList.contains('docs-editor') : !split.classList.contains('no-editor');
     add('Display', editorShown ? 'Hide code editor' : 'Show code editor', () => toggleEditor(), `${MOD}\\`);
     add('File', 'Import information schema (CSV or text)…', () => openImport());
