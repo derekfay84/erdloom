@@ -121,16 +121,16 @@
         const nt = ix.tables.get(k);
         const c = safeColor(nt && nt.color, HEADER);
         const mid = (edgeX + centerEdge) / 2;
-        svg += `<path d="M${edgeX},${my} C${mid},${my} ${mid},${cy} ${centerEdge},${cy}" fill="none" stroke="#9AA7B8" stroke-width="1.2"/>`;
-        svg += `<path d="${mark(edgeX, my, dirOut, v.otherRel)} ${mark(centerEdge, cy, dirIn, v.selfRel)}" fill="none" stroke="#9AA7B8" stroke-width="1.2"/>`;
+        svg += `<path d="M${edgeX},${my} C${mid},${my} ${mid},${cy} ${centerEdge},${cy}" fill="none" style="stroke: var(--m-line, #9AA7B8)" stroke-width="1.2"/>`;
+        svg += `<path d="${mark(edgeX, my, dirOut, v.otherRel)} ${mark(centerEdge, cy, dirIn, v.selfRel)}" fill="none" style="stroke: var(--m-line, #9AA7B8)" stroke-width="1.2"/>`;
         svg += `<a href="#${ix.ids.get(`t:${k}`)}" data-table="${esc(k)}"><title>${esc(k)}</title>`;
-        svg += `<rect x="${x}" y="${y}" width="${BW}" height="${BH}" rx="5" fill="#FFFFFF" stroke="#D3DCE6"/>`;
+        svg += `<rect x="${x}" y="${y}" width="${BW}" height="${BH}" rx="5" style="fill: var(--m-box, #FFFFFF); stroke: var(--m-box-line, #D3DCE6)"/>`;
         svg += `<rect x="${x}" y="${y}" width="4" height="${BH}" rx="2" fill="${c}"/>`;
-        svg += `<text x="${x + 10}" y="${my}" dominant-baseline="central" fill="#1F2933">${esc(short(k))}</text></a>`;
+        svg += `<text x="${x + 10}" y="${my}" dominant-baseline="central" style="fill: var(--m-text, #1F2933)">${esc(short(k))}</text></a>`;
       });
       if (list.length > MAX) {
         const y = top + MAX * (BH + GAP) + BH / 2;
-        svg += `<text x="${x + BW / 2}" y="${y}" text-anchor="middle" dominant-baseline="central" fill="#6B7785">+${list.length - MAX} more</text>`;
+        svg += `<text x="${x + BW / 2}" y="${y}" text-anchor="middle" dominant-baseline="central" style="fill: var(--m-muted, #6B7785)">+${list.length - MAX} more</text>`;
       }
     };
     column(L, PAD, PAD + BW, cx, 1, -1);
@@ -316,42 +316,42 @@
 .erd-docs .d-gcard { border: 1px solid var(--line); border-left: 4px solid var(--c); border-radius: 0; padding: 10px 12px; scroll-margin-top: 16px; }
 .erd-docs .d-gname { font-weight: 600; }
 .erd-docs .d-glinks { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 6px; }
-.erd-docs .d-sticky { background: #FFF9E6; border: 1px solid #F3E3B5; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+.erd-docs .d-sticky { background: var(--sticky-bg, #FFF9E6); border: 1px solid var(--sticky-line, #F3E3B5); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
 .erd-docs .d-overview { padding-bottom: 18px; border-bottom: 1px solid var(--line); }
 .erd-docs .d-part { margin: 40px 0 0; font-size: 13px; color: var(--muted); text-transform: none; }
 .erd-docs .d-filter { display: flex; align-items: center; gap: 12px; color: var(--muted); padding: 4px 0 10px; border-bottom: 1px solid var(--line); }
 .erd-docs section.d-table, .erd-docs section.d-enum { padding: 26px 0; border-bottom: 1px solid var(--line); scroll-margin-top: 8px; }
 .erd-docs section.flash { animation: d-flash 1.2s ease-out; }
-@keyframes d-flash { from { background: #EAF2FE; } to { background: transparent; } }
+@keyframes d-flash { from { background: var(--flash, #EAF2FE); } to { background: transparent; } }
 .erd-docs .d-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .erd-docs .d-swatch { width: 12px; height: 12px; border-radius: 3px; flex: none; }
-.erd-docs .d-swatch.enum { width: auto; height: auto; color: #8E44AD; font-weight: 700; font-size: 13px; }
+.erd-docs .d-swatch.enum { width: auto; height: auto; color: var(--enum, #8E44AD); font-weight: 700; font-size: 13px; }
 .erd-docs .d-chip { font-size: 12px; background: var(--soft); border: 1px solid var(--line); border-radius: 999px; padding: 1px 9px; color: var(--muted); }
-.erd-docs .d-chip.d-group { color: var(--ink); border-color: var(--c); background: color-mix(in srgb, var(--c) 10%, #fff); }
+.erd-docs .d-chip.d-group { color: var(--ink); border-color: var(--c); background: color-mix(in srgb, var(--c) 10%, var(--chip-mix, #fff)); }
 .erd-docs .d-spacer { flex: 1; }
-.erd-docs .d-act { font: inherit; font-size: 12.5px; background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 7px; padding: 4px 10px; cursor: pointer; }
-.erd-docs .d-act:hover { border-color: #C5CFDA; background: #F8FAFC; }
+.erd-docs .d-act { font: inherit; font-size: 12.5px; background: var(--act-bg, #fff); color: var(--ink); border: 1px solid var(--line); border-radius: 7px; padding: 4px 10px; cursor: pointer; }
+.erd-docs .d-act:hover { border-color: var(--line-strong, #C5CFDA); background: var(--act-hover, #F8FAFC); }
 .erd-docs .d-body { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 28px; margin-top: 14px; }
 .erd-docs .d-body.no-side { grid-template-columns: minmax(0, 1fr); }
 .erd-docs .d-scroll { overflow-x: auto; }
 .erd-docs table.d-grid { width: 100%; border-collapse: collapse; font-size: 13px; }
 .erd-docs table.d-narrow { width: auto; min-width: 260px; }
 .erd-docs .d-grid th { text-align: left; font-weight: 600; color: var(--muted); font-size: 12px; padding: 6px 12px 6px 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
-.erd-docs .d-grid td { padding: 7px 12px 7px 0; border-bottom: 1px solid #EEF1F4; vertical-align: top; }
-.erd-docs .d-grid tr.hit td { background: #FFF6D6; }
+.erd-docs .d-grid td { padding: 7px 12px 7px 0; border-bottom: 1px solid var(--row-line, #EEF1F4); vertical-align: top; }
+.erd-docs .d-grid tr.hit td { background: var(--hit-bg, #FFF6D6); }
 .erd-docs .d-cname { font-weight: 600; white-space: nowrap; }
 .erd-docs .d-keys { white-space: nowrap; }
 .erd-docs .d-cnote { color: var(--muted); min-width: 160px; }
 .erd-docs .d-empty { color: var(--muted); font-style: italic; }
 .erd-docs .b { display: inline-block; font-size: 11px; font-weight: 600; border-radius: 4px; padding: 0 5px; background: var(--soft); border: 1px solid var(--line); color: var(--muted); }
-.erd-docs .b-pk { background: #FDF3D6; border-color: #EBD48E; color: #8A6A0B; }
-.erd-docs .b-fk { background: #E7F0FD; border-color: #B9D3FA; color: #1B5FC1; }
+.erd-docs .b-pk { background: var(--pk-bg, #FDF3D6); border-color: var(--pk-line, #EBD48E); color: var(--pk-text, #8A6A0B); }
+.erd-docs .b-fk { background: var(--fk-bg, #E7F0FD); border-color: var(--fk-line, #B9D3FA); color: var(--fk-text, #1B5FC1); }
 .erd-docs .d-side { min-width: 0; }
 .erd-docs .d-mini { min-height: 40px; background: var(--soft); border: 1px solid var(--line); border-radius: 8px; padding: 6px; }
 .erd-docs .d-mini svg { display: block; }
 .erd-docs .d-mini a text { text-decoration: none; }
 .erd-docs .d-rels { list-style: none; margin: 0; padding: 0; font-size: 13px; }
-.erd-docs .d-rels li { padding: 5px 0; border-bottom: 1px solid #EEF1F4; display: flex; flex-wrap: wrap; gap: 2px 8px; }
+.erd-docs .d-rels li { padding: 5px 0; border-bottom: 1px solid var(--row-line, #EEF1F4); display: flex; flex-wrap: wrap; gap: 2px 8px; }
 .erd-docs .d-rel { color: var(--muted); }
 .erd-docs .d-card { color: var(--muted); font-size: 12px; width: 100%; }
 .erd-docs .d-used { margin: 10px 0 0; color: var(--muted); }

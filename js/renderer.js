@@ -8,11 +8,21 @@
   const FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif';
   const MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
   const M = { headerH: 38, rowH: 28, padX: 12, iconW: 20, gap: 28, minW: 190, radius: 8 };
-  const C = {
-    header: '#2F5D8A', body: '#FFFFFF', alt: '#F7F9FB', border: '#D3DCE6', sep: '#EDF1F5',
-    name: '#1F2933', type: '#6B7785', enumType: '#8E44AD', pk: '#D4A017', fk: '#2F80ED',
-    ref: '#8E9BAE', note: '#9AA5B1',
+  // Colours are written into the SVG (so exports stand alone), one palette per theme.
+  // Exports always use the light palette.
+  const PALETTES = {
+    light: {
+      header: '#2F5D8A', body: '#FFFFFF', alt: '#F7F9FB', border: '#D3DCE6', sep: '#EDF1F5',
+      name: '#1F2933', type: '#6B7785', enumType: '#8E44AD', pk: '#D4A017', fk: '#2F80ED',
+      ref: '#8E9BAE', note: '#9AA5B1', group: '#7F8FA6', accent: '#2F80ED', shadow: 0.12, shadowColor: '#1F2933', page: '#FFFFFF',
+    },
+    dark: {
+      header: '#2F5D8A', body: '#1C222B', alt: '#212833', border: '#353F4D', sep: '#29313C',
+      name: '#E3E8EF', type: '#8F9BAC', enumType: '#C79BE0', pk: '#E5B53A', fk: '#5AA0F5',
+      ref: '#6E7D92', note: '#7D8A9B', group: '#8D9BB3', accent: '#4C93F2', shadow: 0.45, shadowColor: '#000000', page: '#12161D',
+    },
   };
+  let C = PALETTES.light;
 
   function el(tag, attrs, parent) {
     const e = document.createElementNS(NS, tag);
@@ -110,7 +120,8 @@
       this.svg = el('svg', { class: 'diagram', xmlns: NS }, container);
       const defs = el('defs', null, this.svg);
       const f = el('filter', { id: 'dbml-shadow', x: '-10%', y: '-10%', width: '120%', height: '130%' }, defs);
-      el('feDropShadow', { dx: 0, dy: 2, stdDeviation: 3, 'flood-color': '#1F2933', 'flood-opacity': 0.12 }, f);
+      this.shadow = el('feDropShadow', { dx: 0, dy: 2, stdDeviation: 3, 'flood-color': C.shadowColor, 'flood-opacity': C.shadow }, f);
+      this.theme = 'light';
       this.viewport = el('g', { class: 'viewport' }, this.svg);
       this.gGroups = el('g', { class: 'groups' }, this.viewport);
       this.gRefs = el('g', { class: 'refs' }, this.viewport);
@@ -151,6 +162,15 @@
       if (this.model) this.draw();
     }
     setKeysOnly(on) { this.keysOnly = !!on; if (this.model) this.draw(); }
+
+    // 'light' or 'dark'
+    setTheme(name) {
+      this.theme = PALETTES[name] ? name : 'light';
+      C = PALETTES[this.theme];
+      this.shadow.setAttribute('flood-opacity', C.shadow);
+      this.shadow.setAttribute('flood-color', C.shadowColor);
+      if (this.model) this.draw();
+    }
 
     draw() {
       if (!this.model) return;
@@ -304,7 +324,7 @@
         const y0 = Math.min(...ks.map((k) => this.positions[k].y)) - pad - top;
         const x1 = Math.max(...ks.map((k) => this.positions[k].x + this.sizes[k].w)) + pad;
         const y1 = Math.max(...ks.map((k) => this.positions[k].y + this.sizes[k].h)) + pad;
-        const color = grp.color || '#7F8FA6';
+        const color = grp.color || C.group;
         const g = el('g', { class: 'group' }, this.gGroups);
         el('rect', { x: x0, y: y0, width: x1 - x0, height: y1 - y0, rx: 14, fill: color, 'fill-opacity': 0.07, stroke: color, 'stroke-opacity': 0.45, 'stroke-dasharray': '6 4' }, g);
         text(g, x0 + 16, y0 + 18, grp.name, { fill: color, 'font-size': 13, 'font-weight': 600 });
@@ -566,7 +586,7 @@
       }
       el('rect', {
         class: 'mini-view', x: tx(vw.x0), y: ty(vw.y0), width: (vw.x1 - vw.x0) * sc, height: (vw.y1 - vw.y0) * sc,
-        fill: 'rgba(47,128,237,.08)', stroke: '#2F80ED', 'stroke-width': 1.2, rx: 2,
+        fill: C.accent, 'fill-opacity': 0.1, stroke: C.accent, 'stroke-width': 1.2, rx: 2,
       }, svg);
     }
 
@@ -630,6 +650,12 @@
 
     // -------------------------------------------------------------- export
     toSVG() {
+      const theme = this.theme;
+      if (theme !== 'light') this.setTheme('light');
+      try { return this.copySVG(); } finally { if (theme !== 'light') this.setTheme(theme); }
+    }
+
+    copySVG() {
       const bb = this.viewport.getBBox();
       const pad = 32;
       const vb = [bb.x - pad, bb.y - pad, bb.width + pad * 2, bb.height + pad * 2].map((n) => Math.round(n));

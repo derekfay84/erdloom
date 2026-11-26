@@ -27,6 +27,7 @@ That's all you need. If you'd rather serve it over HTTP, run `npm start` and go 
 - **Arrange freely.** Drag tables and they snap to the grid (hold ⌥/Alt to place them freely). Positions are remembered. **Arrange** lays everything out automatically: each `TableGroup` is kept together in its own box, groups that reference each other are placed side by side, and the whole diagram is shaped to fit the space you have (wider when the code editor is hidden).
 - **Hover** a table or column to highlight its relationships and see its type, flags, default, note, enum values and references.
 - **Export** the diagram as SVG or PNG, save the DBML, or **Copy link** to get a URL with the whole schema compressed into it.
+- **Light and dark themes.** The theme button in the top bar (or ⌘/Ctrl+K → *Theme*) switches between matching your system, light and dark. The diagram, Docs tab and dialogs all follow it. Exported SVG, PNG and HTML docs always use the light theme, so they print and share well.
 
 ### Built for big schemas
 
@@ -101,7 +102,7 @@ ERDLoom has its own parser (`js/parser.js`), which supports:
 | ⌘/Ctrl+\\ | Show or hide the code editor |
 | ⌘/Ctrl+S, ⌘/Ctrl+O | Save, open |
 
-Single-key shortcuts only work when you're not typing in a field. Your DBML, table positions, saved views and layout preferences are kept in this browser's local storage.
+Single-key shortcuts only work when you're not typing in a field. Your DBML, table positions, saved views, layout preferences and theme are kept in this browser's local storage.
 
 ## Development
 
