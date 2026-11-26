@@ -309,6 +309,35 @@ button.primary:hover { background: #256FD6; border-color: #256FD6; }
   .imp-input { border-right: 0; }
 }
 
+/* ---------------------------------------------------------- suggestions */
+.sg-list { display: flex; flex-direction: column; gap: 8px; padding: 16px 18px; min-height: 0; overflow-y: auto; border-right: 1px solid var(--line); }
+.sg-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+.sg-head h3 { margin: 0; font-size: 13.5px; font-weight: 650; flex: 1; }
+.sg-pick { font-size: 12px; color: var(--muted); display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.sg-pick button { font-size: 12px; padding: 2px 8px; }
+.sg-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.sg-items:empty { display: none; }
+.sg-item { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
+.sg-item:hover { border-color: #C4CEDA; }
+.sg-item.on { background: #F3F8FF; border-color: #BCD5F8; }
+.sg-item input[type="checkbox"] { margin: 2px 0 0; grid-row: span 2; }
+.sg-main { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; min-width: 0; }
+.sg-main code { font: 12.5px var(--ed-font); overflow-wrap: anywhere; }
+.sg-arrow { color: var(--muted); }
+.sg-why { font-size: 12px; color: var(--muted); line-height: 1.45; }
+.sg-conf { font-size: 11px; font-weight: 600; border-radius: 4px; padding: 0 6px; line-height: 18px; }
+.sg-conf.high { background: #DDF3EA; color: #0B6B4C; }
+.sg-conf.medium { background: #FDF0D5; color: #8A5A00; }
+.sg-conf.low { background: #EEF1F4; color: #55606C; }
+.sg-card { font-size: 11.5px; color: var(--muted); }
+.sg-name { font: 600 13px var(--ed-font); border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; width: 16ch; }
+.sg-name:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(47, 128, 237, .15); }
+.sg-tables { font: 12px var(--ed-font); color: var(--text); overflow-wrap: anywhere; }
+.sg-note, .sg-empty { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+.sg-note:empty { display: none; }
+.sg-foot-note { font-size: 12px; color: var(--muted); }
+@media (max-width: 760px) { .sg-list { border-right: 0; overflow: visible; } }
+
 .tooltip {
   position: absolute; display: none; z-index: 20; pointer-events: none; max-width: 340px;
   background: #1F2933; color: #E8ECF1; border-radius: 8px; padding: 9px 11px;

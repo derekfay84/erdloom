@@ -390,6 +390,7 @@
       add('Display', 'Fit diagram to screen', () => diagram.fit(), 'F');
       add('Display', 'Zoom to 100%', () => diagram.zoomTo(1), '1');
       add('Display', 'Auto-arrange tables', autoArrange);
+      add('Schema', 'Suggest relationships and groups…', () => openSuggest(), 'from names and keys');
     }
     add('Display', split.classList.contains('no-rail') ? 'Show outline' : 'Hide outline', () => toggleRail(), `${MOD}B`);
     const editorShown = tab === 'docs' ? split.classList.contains('docs-editor') : !split.classList.contains('no-editor');
@@ -629,7 +630,7 @@
     impResult = null;
     const text = impText.value;
     if (!text.trim()) {
-      impSummary.innerHTML = 'The generated DBML will appear here.<span class="muted">This input has no foreign-key information, so tables are created without relationships.</span>';
+      impSummary.innerHTML = 'The generated DBML will appear here.<span class="muted">This input has no foreign-key information. After importing you can review relationships suggested from column names.</span>';
       return;
     }
     const res = DBMLImport.convert(text, { groupBySchema: impGroup.checked });
@@ -654,7 +655,7 @@
       const st = res.stats;
       const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
       impSummary.innerHTML = `<b>${plural(st.tables, 'table')}</b> · ${plural(st.columns, 'column')} · ${plural(st.schemas, 'schema')} · ${plural(st.databases, 'database')}` +
-        '<span class="muted">No relationships: this input has no foreign-key information.</span>';
+        '<span class="muted">No relationships in this input. Likely ones can be suggested from column names after importing.</span>';
       impPre.innerHTML = DBMLEditor.highlight(res.dbml);
     } else {
       impSummary.textContent = 'Nothing to import yet.';
@@ -696,6 +697,11 @@
       toast(`Imported ${n}. To undo: ${MOD}K → Restore previous DBML`);
     }
     closeImport();
+    if ($('#imp-suggest').checked) {
+      // replacing: the layout was made without relationships, so arrange again once some are added
+      const replaced = impMode() !== 'append';
+      if (!openSuggest({ quiet: true, arrange: replaced })) toast(`Imported ${n}. No relationships or groups to suggest.`);
+    }
   }
 
   impText.addEventListener('input', () => { impSource = null; impFileName.textContent = ''; scheduleImport(); });
@@ -711,6 +717,172 @@
   importModal.addEventListener('pointerdown', (e) => { if (e.target === importModal) closeImport(); });
   impInput.addEventListener('dragover', () => impInput.classList.add('dragging'));
   impInput.addEventListener('dragleave', (e) => { if (!impInput.contains(e.relatedTarget)) impInput.classList.remove('dragging'); });
+
+  // ------------------------------------------------------- suggestions
+  // Rule-based Ref and TableGroup suggestions (js/suggest.js). Nothing is written
+  // until the user ticks what they want and presses Add.
+  const sgModal = $('#suggest');
+  const sgIntro = $('#sg-intro');
+  const sgRefs = $('#sg-refs');
+  const sgGroups = $('#sg-groups');
+  const sgGroupsNote = $('#sg-groups-note');
+  const sgSummary = $('#sg-summary');
+  const sgPre = $('#sg-dbml');
+  const sgGo = $('#sg-go');
+  const LEVEL = { high: 'High', medium: 'Medium', low: 'Low' };
+  const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+  let sg = null;             // { model, refs, on, groups, groupOff, names, dbml, arrange }
+  let sgReturnFocus = null;
+
+  // Returns false (and opens nothing) when quiet and there is nothing to suggest.
+  function openSuggest(opts = {}) {
+    let m;
+    try { m = DBML.parse(editor.value); } catch (e) {
+      toast('Fix the syntax error first, then try Suggest again');
+      return false;
+    }
+    const refs = DBMLSuggest.suggestRefs(m);
+    sg = {
+      model: m, refs, on: new Set(refs.filter((r) => r.level !== 'low').map((r) => r.id)),
+      groups: [], groupOff: new Set(), names: new Map(), dbml: '', arrange: !!opts.arrange,
+    };
+    if (opts.quiet && !refs.length && !DBMLSuggest.suggestGroups(m).groups.length) { sg = null; return false; }
+    if (!palette.hidden) closePalette();
+    if (sgModal.hidden) sgReturnFocus = document.activeElement;
+    sgModal.hidden = false;
+    renderSuggest();
+    sgGo.focus();
+    return true;
+  }
+
+  function closeSuggest() {
+    sgModal.hidden = true;
+    sg = null;
+    if (sgReturnFocus && document.contains(sgReturnFocus) && sgReturnFocus !== document.body) sgReturnFocus.focus();
+  }
+
+  function renderSuggest() {
+    const { refs, on, model: m } = sg;
+    const counts = { high: 0, medium: 0, low: 0 };
+    refs.forEach((r) => counts[r.level]++);
+    sgIntro.innerHTML = refs.length
+      ? `Found ${plural(refs.length, 'possible relationship')} (${counts.high} high, ${counts.medium} medium, ${counts.low} low confidence) from column names, types and keys. A matching name is a hint, not proof, so check each one.`
+      : `No likely relationships found. Suggestions look for columns such as <code>customer_id</code> that match a table name and its key, with compatible types.${m.refs.length ? ' Columns that already have a reference are skipped.' : ''}`;
+    $('#sg-refs-head').hidden = !refs.length;
+    const tref = (t, c) => `<code>${esc(t)}.${esc(c)}</code>`;
+    sgRefs.innerHTML = refs.map((r, i) => `<li><label class="sg-item${on.has(r.id) ? ' on' : ''}">` +
+      `<input type="checkbox" data-ref="${i}"${on.has(r.id) ? ' checked' : ''}>` +
+      `<span class="sg-main"><span class="sg-conf ${r.level}" title="Confidence ${Math.round(r.confidence * 100)}%">${LEVEL[r.level]}</span>` +
+      `${tref(r.from.table, r.from.column)}<span class="sg-arrow" aria-label="references">→</span>${tref(r.to.table, r.to.column)}` +
+      `<span class="sg-card">${r.cardinality}</span></span>` +
+      `<span class="sg-why">${esc(r.reasons.join(' · '))}</span></label></li>`).join('');
+    renderSuggestGroups();
+  }
+
+  // Groups depend on which relationships are ticked, so they are worked out again on every change.
+  function renderSuggestGroups() {
+    const chosen = sg.refs.filter((r) => sg.on.has(r.id));
+    const res = DBMLSuggest.suggestGroups(sg.model, chosen);
+    sg.groups = res.groups;
+    const notes = [];
+    if (!res.groups.length) notes.push('No groups found. Groups come from relationships and shared name prefixes such as <code>auth_</code>, and need at least four tables that are not already in a TableGroup.');
+    else notes.push('Clusters of tables that are closely connected to each other. Rename a group by editing its name.');
+    if (res.skipped) notes.push(`${plural(res.skipped, 'table')} already in a TableGroup ${res.skipped === 1 ? 'is' : 'are'} left out.`);
+    sgGroupsNote.innerHTML = notes.join(' ');
+    sgGroups.innerHTML = res.groups.map((g, i) => {
+      const checked = !sg.groupOff.has(g.id);
+      const name = sg.names.get(g.id) ?? g.name;
+      return `<li><label class="sg-item${checked ? ' on' : ''}">` +
+        `<input type="checkbox" data-group="${i}"${checked ? ' checked' : ''}>` +
+        `<span class="sg-main"><input class="sg-name" data-name="${i}" value="${esc(name)}" aria-label="Group name" spellcheck="false">` +
+        `<span class="sg-card">${plural(g.tables.length, 'table')}</span></span>` +
+        `<span class="sg-why"><span class="sg-tables">${g.tables.map(esc).join(', ')}</span>` +
+        `${g.reasons.length ? `<br>${esc(g.reasons.join(' · '))}` : ''}</span></label></li>`;
+    }).join('');
+    renderSuggestPreview();
+  }
+
+  function chosenSuggestions() {
+    const refs = sg.refs.filter((r) => sg.on.has(r.id));
+    const groups = sg.groups.filter((g) => !sg.groupOff.has(g.id))
+      .map((g) => ({ ...g, name: (sg.names.get(g.id) ?? g.name).trim() || g.name }));
+    return { refs, groups };
+  }
+
+  function renderSuggestPreview() {
+    const { refs, groups } = chosenSuggestions();
+    sg.dbml = DBMLSuggest.toDbml(sg.model, refs, groups);
+    sgSummary.classList.remove('bad');
+    sgGo.disabled = !sg.dbml;
+    sgGo.textContent = sg.dbml ? `Add ${[refs.length && plural(refs.length, 'relationship'), groups.length && plural(groups.length, 'group')].filter(Boolean).join(' and ')}` : 'Add to DBML';
+    if (!sg.dbml) {
+      sgSummary.innerHTML = 'Nothing selected.<span class="muted">Tick the suggestions you want; the DBML they add appears here.</span>';
+      sgPre.innerHTML = '';
+      return;
+    }
+    try {
+      DBML.parse(`${editor.value.replace(/\s+$/, '')}\n\n${sg.dbml}`);
+    } catch (e) {
+      sgSummary.classList.add('bad');
+      sgSummary.innerHTML = `This wouldn't parse: ${esc(e.message)}.`;
+      sgGo.disabled = true;
+    }
+    if (!sgSummary.classList.contains('bad')) {
+      sgSummary.innerHTML = `<b>${plural(refs.length, 'relationship')}</b> · ${plural(groups.length, 'group')}<span class="muted">Added to the end of your DBML.</span>`;
+    }
+    sgPre.innerHTML = DBMLEditor.highlight(sg.dbml);
+  }
+
+  function applySuggest() {
+    if (!sg || !sg.dbml || sgGo.disabled) return;
+    const { refs, groups } = chosenSuggestions();
+    const arrange = sg.arrange;
+    store.set('previous', editor.value);
+    editor.value = `${editor.value.replace(/\s+$/, '')}\n\n${sg.dbml}`;
+    update();
+    if (arrange) autoArrange();
+    closeSuggest();
+    const what = [refs.length && plural(refs.length, 'relationship'), groups.length && plural(groups.length, 'group')].filter(Boolean).join(' and ');
+    toast(`Added ${what}. To undo: ${MOD}K → Restore previous DBML`);
+  }
+
+  sgRefs.addEventListener('change', (e) => {
+    const i = e.target.getAttribute('data-ref');
+    if (i === null) return;
+    const r = sg.refs[+i];
+    if (e.target.checked) sg.on.add(r.id); else sg.on.delete(r.id);
+    e.target.closest('.sg-item').classList.toggle('on', e.target.checked);
+    renderSuggestGroups();
+  });
+  sgGroups.addEventListener('change', (e) => {
+    const i = e.target.getAttribute('data-group');
+    if (i === null) return;
+    const g = sg.groups[+i];
+    if (e.target.checked) sg.groupOff.delete(g.id); else sg.groupOff.add(g.id);
+    e.target.closest('.sg-item').classList.toggle('on', e.target.checked);
+    renderSuggestPreview();
+  });
+  sgGroups.addEventListener('input', (e) => {
+    const i = e.target.getAttribute('data-name');
+    if (i === null) return;
+    sg.names.set(sg.groups[+i].id, e.target.value);
+    renderSuggestPreview();
+  });
+  // typing a name shouldn't toggle the group's checkbox
+  sgGroups.addEventListener('click', (e) => { if (e.target.classList.contains('sg-name')) e.preventDefault(); });
+  document.querySelectorAll('[data-pick]').forEach((b) => {
+    b.onclick = () => {
+      const pick = b.getAttribute('data-pick');
+      const keep = { high: ['high'], medium: ['high', 'medium'], all: ['high', 'medium', 'low'], none: [] }[pick];
+      sg.on = new Set(sg.refs.filter((r) => keep.includes(r.level)).map((r) => r.id));
+      renderSuggest();
+    };
+  });
+  $('#sg-close').onclick = closeSuggest;
+  $('#sg-cancel').onclick = closeSuggest;
+  sgGo.onclick = applySuggest;
+  $('#btn-suggest').onclick = () => openSuggest();
+  sgModal.addEventListener('pointerdown', (e) => { if (e.target === sgModal) closeSuggest(); });
 
   // --------------------------------------------------------------- docs
   function setTab(t) {
@@ -822,6 +994,11 @@
   document.addEventListener('keydown', (e) => {
     const mod = e.metaKey || e.ctrlKey;
     const k = e.key.toLowerCase();
+    if (!sgModal.hidden) {
+      if (k === 'escape') { e.preventDefault(); closeSuggest(); }
+      else if (mod && k === 'enter') { e.preventDefault(); applySuggest(); }
+      return;
+    }
     if (!importModal.hidden) {
       if (k === 'escape') { e.preventDefault(); closeImport(); }
       else if (mod && k === 'enter') { e.preventDefault(); runImport(); }
@@ -854,7 +1031,7 @@
     document.body.classList.remove('dropping');
     impInput.classList.remove('dragging');
     const f = e.dataTransfer.files[0];
-    if (!f) return;
+    if (!f || !sgModal.hidden) return;
     if (!importModal.hidden || /\.(csv|tsv)$/i.test(f.name) || /csv|tab-separated/.test(f.type)) openImport(f);
     else openFile(f);
   });

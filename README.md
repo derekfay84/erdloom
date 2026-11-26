@@ -63,7 +63,17 @@ database_name, schema_name, table_name, column_name, data_type, is_primary_key
 - `is_primary_key` accepts `YES`/`NO`, `true`/`false`, `t`/`f`, `1`/`0` and `PRI`. A table with several key columns gets a composite primary key.
 - Tables are qualified by schema and grouped by schema.
 - You see the generated DBML and any skipped rows before importing. You can then replace your DBML (and restore it later from the command palette) or add the new tables to it.
-- These six columns carry no foreign-key information, so imported tables have no relationships until you add `Ref`s.
+- These six columns carry no foreign-key information, so the import itself creates no relationships. By default the **Suggest** review opens straight afterwards (see below).
+
+### Suggest relationships and groups
+
+**Suggest** (or ⌘/Ctrl+K → *Suggest relationships and groups*) proposes `Ref`s and `TableGroup`s for the current DBML. It runs entirely in the browser and uses only what the schema says: table and column names, types and keys. It doesn't use AI or need a network connection.
+
+- **Relationships** come from naming patterns: `customer_id` → `customers.id`, `orderId` → `orders.id`, `country_code` → `countries.code` (when `code` is a key), a column with the same name as another table's primary key, role prefixes such as `billing_address_id` → `addresses.id`, and self-references such as `parent_id` or `manager_employee_id`. Plurals and prefixes like `tbl_` or `auth_` are handled.
+- Each suggestion is checked against the target: it must point at a primary key or unique column (or a bare `id` when the table declares no key), and the two column types must be compatible. A unique or primary-key column on the referencing side makes it one-to-one.
+- Each one gets **High**, **Medium** or **Low** confidence, and the reasons are shown next to it. Columns that already have a reference are skipped.
+- **Groups** come from community detection (Louvain) on the graph of relationships, including the suggested ones you have ticked, with a pull towards tables that share a name prefix. They are named after a shared prefix or the best-connected table, and you can rename them. Tables that are already in a `TableGroup` are left out.
+- Nothing changes until you tick what you want and press **Add**. The accepted `Ref`s and `TableGroup`s are appended to your DBML, and ⌘/Ctrl+K → *Restore previous DBML* undoes it.
 
 ## DBML support
 
@@ -98,7 +108,7 @@ Single-key shortcuts only work when you're not typing in a field. Your DBML, tab
 There are no runtime dependencies. Node 18 or newer is needed only for the tests and the build.
 
 ```bash
-npm test         # parser and importer tests (node:test)
+npm test         # parser, importer and suggestion tests (node:test)
 npm run build    # writes dist/erdloom.html, the single-file build
 npm start        # serves the folder at http://localhost:5173 (uses Python 3)
 ```
@@ -112,10 +122,11 @@ npm start        # serves the folder at http://localhost:5173 (uses Python 3)
 | `js/editor.js` | Code editor with syntax highlighting, line numbers and auto-indent |
 | `js/docs.js` | Docs tab and the exported HTML docs page |
 | `js/importer.js` | Information-schema rows to DBML. Also works in Node |
+| `js/suggest.js` | Rule-based relationship and group suggestions. Also works in Node |
 | `js/app.js` | Wires it all together: outline, palette, views, import dialog, persistence |
 | `js/sample.js` | The fictional example schema |
 | `scripts/build.mjs` | Inlines everything into `dist/erdloom.html` |
-| `test/` | Parser and importer tests |
+| `test/` | Parser, importer and suggestion tests |
 
 `DBML.parse(src)` returns `{ project, tables, refs, enums, groups, notes }`, or throws a `DBMLError` with `line` and `col`.
 
