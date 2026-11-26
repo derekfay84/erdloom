@@ -2,7 +2,7 @@
  * Information-schema importer: turns rows of
  *   database_name, schema_name, table_name, column_name, data_type, is_primary_key
  * (CSV, TSV or other delimited text) into DBML. No other information is used, so
- * no relationships are created.
+ * no relationships are created here; js/suggest.js can propose them afterwards.
  * Works in the browser (window.DBMLImport) and in Node (module.exports).
  */
 (function (root, factory) {
@@ -135,7 +135,7 @@
     const out = [];
     const today = opts.date || new Date().toISOString().slice(0, 10);
     out.push(`// Imported from information schema on ${today}.`);
-    out.push('// Relationships are not part of this input, so none are defined.');
+    out.push('// This input has no foreign-key information, so no relationships are defined here.');
     out.push('');
     if (!multiDb && databases[0]) {
       out.push(`Project ${ident(databases[0])} {`);
