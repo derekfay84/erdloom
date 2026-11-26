@@ -66,13 +66,14 @@
     }
     clearError();
     model = next;
-    const sizes = DBMLDiagram.measureTables(model, false);
-    const auto = DBMLLayout.autoLayout(model, sizes);
     const placed = {};
     const known = model.tables.filter((t) => positions[t.key]);
     const fresh = model.tables.filter((t) => !positions[t.key]);
     for (const t of known) placed[t.key] = { ...positions[t.key] };
     if (fresh.length) {
+      // only lay out when there is something new to place, not on every keystroke
+      const sizes = DBMLDiagram.measureTables(model, false);
+      const auto = DBMLLayout.autoLayout(model, sizes, { aspect: canvasAspect() });
       if (known.length) {
         // new tables go to the right of what has already been arranged
         const maxX = Math.max(...known.map((t) => placed[t.key].x + sizes[t.key].w));
@@ -98,6 +99,14 @@
     status.classList.remove('bad');
     renderDocs();
     if (firstRender) { firstRender = false; requestFit(); }
+  }
+
+  // Shape of the diagram area, so auto-layout fills it rather than a long strip.
+  function canvasAspect() {
+    const el = $('#canvas');
+    // same margins as Diagram.fit(): 48px padding, and room for the minimap on wide canvases
+    const w = el.clientWidth - 96 - (el.clientWidth > 700 ? 170 : 0), h = el.clientHeight - 96;
+    return w > 50 && h > 50 ? w / h : 1.6;
   }
 
   function requestFit() {
@@ -518,7 +527,7 @@
   }
   function autoArrange() {
     if (!model) return;
-    const auto = DBMLLayout.autoLayout(model, DBMLDiagram.measureTables(model, false));
+    const auto = DBMLLayout.autoLayout(model, DBMLDiagram.measureTables(model, false), { aspect: canvasAspect() });
     for (const k in auto) positions[k] = auto[k];
     savePositions();
     diagram.setModel(model, auto);

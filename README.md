@@ -24,7 +24,7 @@ That's all you need. If you'd rather serve it over HTTP, run `npm start` and go 
 
 - **Live diagram.** The diagram updates as you type. If you make a syntax error, the last valid diagram stays on screen, and an error bar shows the line and column; click it to jump there.
 - **Relationship lines** attach to the exact column rows, use crow's-foot notation, and route around tables where they can.
-- **Arrange freely.** Drag tables and they snap to the grid (hold ⌥/Alt to place them freely). Positions are remembered. **Arrange** lays everything out automatically.
+- **Arrange freely.** Drag tables and they snap to the grid (hold ⌥/Alt to place them freely). Positions are remembered. **Arrange** lays everything out automatically: each `TableGroup` is kept together in its own box, groups that reference each other are placed side by side, and the whole diagram is shaped to fit the space you have (wider when the code editor is hidden).
 - **Hover** a table or column to highlight its relationships and see its type, flags, default, note, enum values and references.
 - **Export** the diagram as SVG or PNG, save the DBML, or **Copy link** to get a URL with the whole schema compressed into it.
 
@@ -108,7 +108,7 @@ Single-key shortcuts only work when you're not typing in a field. Your DBML, tab
 There are no runtime dependencies. Node 18 or newer is needed only for the tests and the build.
 
 ```bash
-npm test         # parser, importer and suggestion tests (node:test)
+npm test         # parser, importer, suggestion and layout tests (node:test)
 npm run build    # writes dist/erdloom.html, the single-file build
 npm start        # serves the folder at http://localhost:5173 (uses Python 3)
 ```
@@ -117,7 +117,7 @@ npm start        # serves the folder at http://localhost:5173 (uses Python 3)
 | --- | --- |
 | `index.html`, `css/styles.css` | App shell and styles |
 | `js/parser.js` | Tokenizer, parser and model builder. Also works in Node: `require('./js/parser.js').parse(src)` |
-| `js/layout.js` | Automatic layout: layered by relationship, schema groups kept together |
+| `js/layout.js` | Automatic layout: each group laid out on its own (layered by relationship), then groups placed next to the ones they link to, shaped to the screen |
 | `js/renderer.js` | SVG diagram: line routing, pan/zoom/drag, minimap, tooltips, SVG/PNG export |
 | `js/editor.js` | Code editor with syntax highlighting, line numbers and auto-indent |
 | `js/docs.js` | Docs tab and the exported HTML docs page |
@@ -126,7 +126,7 @@ npm start        # serves the folder at http://localhost:5173 (uses Python 3)
 | `js/app.js` | Wires it all together: outline, palette, views, import dialog, persistence |
 | `js/sample.js` | The fictional example schema |
 | `scripts/build.mjs` | Inlines everything into `dist/erdloom.html` |
-| `test/` | Parser, importer and suggestion tests |
+| `test/` | Parser, importer, suggestion and layout tests |
 
 `DBML.parse(src)` returns `{ project, tables, refs, enums, groups, notes }`, or throws a `DBMLError` with `line` and `col`.
 
