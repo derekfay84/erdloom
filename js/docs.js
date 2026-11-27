@@ -73,7 +73,9 @@
         });
       }
     }
-    return { tables, ids, groupOf, enumUsers, rel, fk, hasRefs: model.refs.length > 0 };
+    // same colour per group as the diagram (js/colors.js), falling back to the old grey
+    const groupColor = new Map(model.groups.map((g) => [g.name, root.DBMLColors ? root.DBMLColors.groupColor(model, g) : g.color]));
+    return { tables, ids, groupOf, groupColor, enumUsers, rel, fk, hasRefs: model.refs.length > 0 };
   }
 
   const tLink = (ix, key, label) => `<a href="#${ix.ids.get(`t:${key}`)}" data-table="${esc(key)}">${esc(label || key)}</a>`;
@@ -158,7 +160,7 @@
     h += `<header class="d-head"><span class="d-swatch" style="background:${color}"></span><h2>${esc(t.name)}</h2>`;
     if (t.schema) h += `<span class="d-chip">${esc(t.schema)}</span>`;
     if (t.alias) h += `<span class="d-chip">alias ${esc(t.alias)}</span>`;
-    if (g && g.name !== t.schema) h += `<a class="d-chip d-group" href="#${ix.ids.get(`g:${g.name}`)}" data-group="${esc(g.name)}" style="--c:${safeColor(g.color, GROUP)}">${esc(g.name)}</a>`;
+    if (g && g.name !== t.schema) h += `<a class="d-chip d-group" href="#${ix.ids.get(`g:${g.name}`)}" data-group="${esc(g.name)}" style="--c:${safeColor(ix.groupColor.get(g.name), GROUP)}">${esc(g.name)}</a>`;
     h += '<span class="d-spacer"></span>';
     if (!opts.export) {
       h += `<button class="d-act" data-show="${esc(t.key)}" title="Open this table in the diagram">Show in diagram</button>`;
@@ -251,7 +253,7 @@
     if (model.groups.length) {
       h += '<h3>Groups</h3><div class="d-groups">';
       for (const g of model.groups) {
-        h += `<div class="d-gcard" id="${ix.ids.get(`g:${g.name}`)}" style="--c:${safeColor(g.color, GROUP)}"><div class="d-gname">${esc(g.name)} <span class="d-muted">${plural(g.tables.length, 'table')}</span></div>`;
+        h += `<div class="d-gcard" id="${ix.ids.get(`g:${g.name}`)}" style="--c:${safeColor(ix.groupColor.get(g.name), GROUP)}"><div class="d-gname">${esc(g.name)} <span class="d-muted">${plural(g.tables.length, 'table')}</span></div>`;
         if (g.note) h += `<p class="d-note">${esc(g.note)}</p>`;
         h += `<div class="d-glinks">${g.tables.map((k) => tLink(ix, k)).join('')}</div></div>`;
       }

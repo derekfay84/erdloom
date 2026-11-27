@@ -295,7 +295,7 @@
     if (!q) {
       const views = [
         { label: 'All tables', meta: model.tables.length, m: { type: 'all' } },
-        ...model.groups.map((g) => ({ label: g.name, meta: g.tables.length, m: { type: 'group', name: g.name }, color: g.color, kind: 'group' })),
+        ...model.groups.map((g) => ({ label: g.name, meta: g.tables.length, m: { type: 'group', name: g.name }, color: DBMLColors.groupColor(model, g), kind: 'group' })),
         ...savedViews.map((v) => ({ label: v.name, meta: v.tables.filter((k) => model.tables.some((t) => t.key === k)).length, m: { type: 'saved', name: v.name }, kind: 'saved' })),
       ];
       h += '<div class="o-section">Views</div>';
