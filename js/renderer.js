@@ -14,12 +14,12 @@
     light: {
       header: '#2F5D8A', body: '#FFFFFF', alt: '#F7F9FB', border: '#D3DCE6', sep: '#EDF1F5',
       name: '#1F2933', type: '#6B7785', enumType: '#8E44AD', pk: '#D4A017', fk: '#2F80ED',
-      ref: '#8E9BAE', note: '#9AA5B1', group: '#7F8FA6', accent: '#2F80ED', shadow: 0.12, shadowColor: '#1F2933', page: '#FFFFFF',
+      ref: '#8E9BAE', note: '#9AA5B1', group: '#7F8FA6', accent: '#2F80ED', shadow: 0.12, shadowColor: '#1F2933', groupFill: 0.07, groupStroke: 0.45, page: '#FFFFFF',
     },
     dark: {
       header: '#2F5D8A', body: '#1C222B', alt: '#212833', border: '#353F4D', sep: '#29313C',
       name: '#E3E8EF', type: '#8F9BAC', enumType: '#C79BE0', pk: '#E5B53A', fk: '#5AA0F5',
-      ref: '#6E7D92', note: '#7D8A9B', group: '#8D9BB3', accent: '#4C93F2', shadow: 0.45, shadowColor: '#000000', page: '#12161D',
+      ref: '#6E7D92', note: '#7D8A9B', group: '#8D9BB3', accent: '#4C93F2', shadow: 0.45, shadowColor: '#000000', groupFill: 0.13, groupStroke: 0.7, page: '#12161D',
     },
   };
   let C = PALETTES.light;
@@ -51,6 +51,8 @@
     const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
     return 0.299 * r + 0.587 * g + 0.114 * b > 170 ? '#1F2933' : '#FFFFFF';
   }
+
+  const groupColor = (model, g) => (root.DBMLColors ? root.DBMLColors.groupColor(model, g) : g.color || C.group);
 
   function tableTitle(t) { return t.schema && t.schema !== 'public' ? `${t.schema}.${t.name}` : t.name; }
 
@@ -324,9 +326,15 @@
         const y0 = Math.min(...ks.map((k) => this.positions[k].y)) - pad - top;
         const x1 = Math.max(...ks.map((k) => this.positions[k].x + this.sizes[k].w)) + pad;
         const y1 = Math.max(...ks.map((k) => this.positions[k].y + this.sizes[k].h)) + pad;
-        const color = grp.color || C.group;
-        const g = el('g', { class: 'group' }, this.gGroups);
-        el('rect', { x: x0, y: y0, width: x1 - x0, height: y1 - y0, rx: 14, fill: color, 'fill-opacity': 0.07, stroke: color, 'stroke-opacity': 0.45, 'stroke-dasharray': '6 4' }, g);
+        const color = groupColor(this.model, grp);
+        const g = el('g', { class: 'group', 'data-group': grp.name }, this.gGroups);
+        el('rect', { x: x0, y: y0, width: x1 - x0, height: y1 - y0, rx: 14, fill: color, 'fill-opacity': C.groupFill, stroke: color, 'stroke-opacity': C.groupStroke, 'stroke-dasharray': '6 4' }, g);
+        // The title band is a handle: drag it to move every table in the group.
+        const handle = el('path', {
+          class: 'group-handle', d: `M${x0},${y0 + 36} V${y0 + 14} Q${x0},${y0} ${x0 + 14},${y0} H${x1 - 14} Q${x1},${y0} ${x1},${y0 + 14} V${y0 + 36} Z`,
+          fill: color, 'fill-opacity': 0,
+        }, g);
+        el('title', null, handle).textContent = `${grp.name}: drag to move the group`;
         text(g, x0 + 16, y0 + 18, grp.name, { fill: color, 'font-size': 13, 'font-weight': 600 });
       }
     }
@@ -417,8 +425,19 @@
 
       svg.addEventListener('pointerdown', (ev) => {
         if (ev.button !== 0) return;
-        const tg = ev.target.closest('.table');
-        if (tg) {
+        const gh = ev.target.closest('.group-handle');
+        const tg = !gh && ev.target.closest('.table');
+        if (gh) {
+          const name = gh.parentNode.getAttribute('data-group');
+          const grp = this.model.groups.find((x) => x.name === name);
+          const keys = grp ? grp.tables.filter((k) => this.positions[k] && this.isVisible(k)) : [];
+          if (!keys.length) return;
+          const origin = Object.fromEntries(keys.map((k) => [k, { ...this.positions[k] }]));
+          // the top-left table snaps to the grid; the others keep their offsets from it
+          const anchor = keys.reduce((a, k) => (origin[k].y < origin[a].y || (origin[k].y === origin[a].y && origin[k].x < origin[a].x) ? k : a));
+          drag = { type: 'group', name, keys, origin, anchor, sx: ev.clientX, sy: ev.clientY, moved: false };
+          svg.classList.add('moving-group');
+        } else if (tg) {
           const key = tg.getAttribute('data-key');
           const p = this.positions[key];
           drag = { type: 'table', key, sx: ev.clientX, sy: ev.clientY, ox: p.x, oy: p.y, moved: false, el: tg };
@@ -446,6 +465,22 @@
             this.drawGroups();
             this.drawMinimap();
             this.refreshHighlight(drag.key);
+          } else if (drag.type === 'group') {
+            const a = drag.origin[drag.anchor];
+            const g = ev.altKey ? 1 : this.grid;
+            const mx = Math.round((a.x + dx / this.view.k) / g) * g - a.x;
+            const my = Math.round((a.y + dy / this.view.k) / g) * g - a.y;
+            for (const k of drag.keys) {
+              const p = this.positions[k];
+              p.x = drag.origin[k].x + mx;
+              p.y = drag.origin[k].y + my;
+              const te = this.tableEls.get(k);
+              if (te) te.setAttribute('transform', `translate(${p.x},${p.y})`);
+            }
+            this.drawRefs();
+            this.drawGroups();
+            this.drawMinimap();
+            this.refreshHighlight();
           } else {
             this.view.x = drag.ox + dx;
             this.view.y = drag.oy + dy;
@@ -458,8 +493,10 @@
 
       const end = (ev) => {
         if (!drag) return;
-        svg.classList.remove('panning');
-        if (drag.type === 'table') {
+        svg.classList.remove('panning', 'moving-group');
+        if (drag.type === 'group') {
+          if (drag.moved && this.opts.onPositionsChange) this.opts.onPositionsChange(this.positions);
+        } else if (drag.type === 'table') {
           if (drag.moved) { if (this.opts.onPositionsChange) this.opts.onPositionsChange(this.positions); }
           else {
             this.selected = this.selected === drag.key ? null : drag.key;

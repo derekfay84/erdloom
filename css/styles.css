@@ -210,6 +210,9 @@ kbd {
 .diagram .table { cursor: move; transition: opacity .12s; }
 .diagram .ref { transition: opacity .12s; }
 .diagram .group { pointer-events: none; }
+.diagram .group-handle { pointer-events: all; cursor: grab; transition: fill-opacity .12s; }
+.diagram .group-handle:hover, .diagram.moving-group .group-handle { fill-opacity: .14; }
+.diagram.moving-group, .diagram.moving-group * { cursor: grabbing !important; }
 .diagram .row:hover .row-bg { fill: var(--d-row-hover); }
 .diagram .row.hl .row-bg { fill: var(--d-row-hl); }
 .diagram.focus .table:not(.active) { opacity: .35; }

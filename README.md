@@ -24,7 +24,7 @@ That's all you need. If you'd rather serve it over HTTP, run `npm start` and go 
 
 - **Live diagram.** The diagram updates as you type. If you make a syntax error, the last valid diagram stays on screen, and an error bar shows the line and column; click it to jump there.
 - **Relationship lines** attach to the exact column rows, use crow's-foot notation, and route around tables where they can.
-- **Arrange freely.** Drag tables and they snap to the grid (hold ⌥/Alt to place them freely). Positions are remembered. **Arrange** lays everything out automatically: each `TableGroup` is kept together in its own box, groups that reference each other are placed side by side, and the whole diagram is shaped to fit the space you have (wider when the code editor is hidden).
+- **Arrange freely.** Drag tables and they snap to the grid (hold ⌥/Alt to place them freely). Drag a group by its title to move all of its tables together. Positions are remembered. **Arrange** lays everything out automatically: each `TableGroup` is kept together in its own box, groups that reference each other are placed side by side, and the whole diagram is shaped to fit the space you have (wider when the code editor is hidden).
 - **Hover** a table or column to highlight its relationships and see its type, flags, default, note, enum values and references.
 - **Export** the diagram as SVG or PNG, save the DBML, or **Copy link** to get a URL with the whole schema compressed into it.
 - **Light and dark themes.** The theme button in the top bar (or ⌘/Ctrl+K → *Theme*) switches between matching your system, light and dark. The diagram, Docs tab and dialogs all follow it. Exported SVG, PNG and HTML docs always use the light theme, so they print and share well.
@@ -34,7 +34,7 @@ That's all you need. If you'd rather serve it over HTTP, run `npm start` and go 
 - **Outline rail** with views, tables and enums. Its filter also matches column names.
 - **Command palette (⌘/Ctrl+K)** to jump to any table or run any action.
 - **Focus mode** shows one table plus its neighbours one, two or three references away.
-- **Views:** every `TableGroup` becomes a view, and you can save your own named views.
+- **Views:** every `TableGroup` becomes a view, and you can save your own named views. Each group gets its own colour, the same in the diagram, outline and docs; a group's `[color: …]` setting overrides it.
 - **Keys only** shows just primary and foreign key columns. It turns on automatically when you zoom out below 50%.
 - **Minimap** for getting around.
 
@@ -109,7 +109,7 @@ Single-key shortcuts only work when you're not typing in a field. Your DBML, tab
 There are no runtime dependencies. Node 18 or newer is needed only for the tests and the build.
 
 ```bash
-npm test         # parser, importer, suggestion and layout tests (node:test)
+npm test         # parser, importer, suggestion, layout and colour tests (node:test)
 npm run build    # writes dist/erdloom.html, the single-file build
 npm start        # serves the folder at http://localhost:5173 (uses Python 3)
 ```
@@ -118,6 +118,7 @@ npm start        # serves the folder at http://localhost:5173 (uses Python 3)
 | --- | --- |
 | `index.html`, `css/styles.css` | App shell and styles |
 | `js/parser.js` | Tokenizer, parser and model builder. Also works in Node: `require('./js/parser.js').parse(src)` |
+| `js/colors.js` | Group colours shared by the diagram, outline and docs |
 | `js/layout.js` | Automatic layout: each group laid out on its own (layered by relationship), then groups placed next to the ones they link to, shaped to the screen |
 | `js/renderer.js` | SVG diagram: line routing, pan/zoom/drag, minimap, tooltips, SVG/PNG export |
 | `js/editor.js` | Code editor with syntax highlighting, line numbers and auto-indent |
@@ -127,7 +128,7 @@ npm start        # serves the folder at http://localhost:5173 (uses Python 3)
 | `js/app.js` | Wires it all together: outline, palette, views, import dialog, persistence |
 | `js/sample.js` | The fictional example schema |
 | `scripts/build.mjs` | Inlines everything into `dist/erdloom.html` |
-| `test/` | Parser, importer, suggestion and layout tests |
+| `test/` | Parser, importer, suggestion, layout and colour tests |
 
 `DBML.parse(src)` returns `{ project, tables, refs, enums, groups, notes }`, or throws a `DBMLError` with `line` and `col`.
 
